@@ -3,173 +3,32 @@
     "product": "SNITCH Alert Dashboard",
     "mode": "Live Monitor",
     "marketBias": "Neutral",
-    "asOf": "2026-04-23 14:43 UTC",
-    "dataSource": "collector.py"
+    "asOf": "Bootstrapped",
+    "dataSource": "seed"
   },
   "metrics": {
-    "qualifiedSignals": 3,
-    "tradeFocus": 1,
-    "emerging": 1,
-    "caution": 1,
-    "avgConfidence": 70,
-    "winRate30d": 58
+    "qualifiedSignals": 0,
+    "tradeFocus": 0,
+    "emerging": 0,
+    "caution": 0,
+    "avgConfidence": 0,
+    "winRate30d": 0
   },
-  "tradeFocusNow": [
-    {
-      "token": "WETH",
-      "pair": "WETH/USDC",
-      "action": "Prepare Entry",
-      "actionShort": "WAIT FOR CONFIRMATION",
-      "confidence": "Medium",
-      "score": 7.4,
-      "direction": "Buy Pressure",
-      "impactPct": 0.91,
-      "tradeUsd": 31250.0,
-      "risk": "Medium",
-      "why": "Strong buy pressure on a liquid pair.",
-      "nextStep": "Open chart now and wait for confirmation.",
-      "doNot": "Do not chase spike.",
-      "cancelIf": "Cancel if buy flow fades."
-    }
-  ],
-  "emergingPotential": [
-    {
-      "token": "LINK",
-      "pair": "LINK/USDC",
-      "action": "Keep On Watch",
-      "actionShort": "WATCH",
-      "confidence": "Medium",
-      "score": 5.6,
-      "direction": "Buy Pressure",
-      "impactPct": 0.31,
-      "tradeUsd": 4200.0,
-      "risk": "Medium",
-      "why": "Early setup still needs confirmation.",
-      "nextStep": "Watch next 15\u201330 minutes.",
-      "doNot": "Do not enter big size yet.",
-      "cancelIf": "Cancel if follow-through fails."
-    }
-  ],
-  "cautionAvoid": [
-    {
-      "token": "SOL",
-      "pair": "SOL/cbBTC",
-      "action": "Reduce Risk",
-      "actionShort": "REDUCE RISK",
-      "confidence": "Medium",
-      "score": 5.2,
-      "direction": "Sell Pressure",
-      "impactPct": 0.97,
-      "tradeUsd": 2780.0,
-      "risk": "High",
-      "why": "Bearish dominance detected.",
-      "nextStep": "Avoid fresh entry and reduce bullish bias.",
-      "doNot": "Do not catch the dip blindly.",
-      "cancelIf": "Cancel if sell pressure fades."
-    }
-  ],
-  "recentSignals": [
-    {
-      "time": "Auto",
-      "token": "WETH",
-      "pair": "WETH/USDC",
-      "direction": "Buy Pressure",
-      "action": "WAIT FOR CONFIRMATION",
-      "score": 7.4,
-      "impact": "0.91%",
-      "usd": "$31,250.00"
-    },
-    {
-      "time": "Auto",
-      "token": "LINK",
-      "pair": "LINK/USDC",
-      "direction": "Buy Pressure",
-      "action": "WATCH",
-      "score": 5.6,
-      "impact": "0.31%",
-      "usd": "$4,200.00"
-    },
-    {
-      "time": "Auto",
-      "token": "SOL",
-      "pair": "SOL/cbBTC",
-      "direction": "Sell Pressure",
-      "action": "REDUCE RISK",
-      "score": 5.2,
-      "impact": "0.97%",
-      "usd": "$2,780.00"
-    }
-  ],
+  "marketFunnel": {
+    "scanned": 0,
+    "rejected": 0,
+    "qualified": 0,
+    "displayed": 0
+  },
+  "tradeFocusNow": [],
+  "emergingPotential": [],
+  "cautionAvoid": [],
+  "potentialTokens": [],
+  "presaleWatchlist": [],
+  "recentSignals": [],
   "performance": {
-    "scoreTrend": [
-      {
-        "name": "Mon",
-        "focus": 4.1,
-        "emerging": 3.2,
-        "caution": 2.4
-      },
-      {
-        "name": "Tue",
-        "focus": 4.8,
-        "emerging": 3.6,
-        "caution": 2.7
-      },
-      {
-        "name": "Wed",
-        "focus": 5.1,
-        "emerging": 3.9,
-        "caution": 3.0
-      },
-      {
-        "name": "Thu",
-        "focus": 5.7,
-        "emerging": 4.2,
-        "caution": 3.1
-      },
-      {
-        "name": "Fri",
-        "focus": 6.3,
-        "emerging": 4.8,
-        "caution": 3.3
-      },
-      {
-        "name": "Sat",
-        "focus": 7.0,
-        "emerging": 5.2,
-        "caution": 3.5
-      }
-    ],
-    "actionMix": [
-      {
-        "name": "Prepare / Wait",
-        "value": 1
-      },
-      {
-        "name": "Watch",
-        "value": 1
-      },
-      {
-        "name": "Avoid / Reduce",
-        "value": 1
-      }
-    ],
-    "proof": [
-      {
-        "metric": "Qualified Signals",
-        "value": "3"
-      },
-      {
-        "metric": "30D Win Rate",
-        "value": "58%"
-      },
-      {
-        "metric": "Avg Confidence",
-        "value": "70/100"
-      },
-      {
-        "metric": "Risk-Off Alerts",
-        "value": "1"
-      }
-    ]
+    "scoreTrend": [],
+    "actionMix": [],
+    "proof": []
   }
 }
