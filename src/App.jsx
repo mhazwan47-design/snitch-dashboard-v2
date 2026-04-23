@@ -292,24 +292,8 @@ function riskBadge(risk) {
   return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
 }
 
-function getBaseDataUrl() {
-  const base = import.meta.env.BASE_URL || "/";
-  return `${base}data/dashboard-current.json`;
-}
-
-function sanitizeStoredUrl(url) {
-  const fallback = getBaseDataUrl();
-  if (!url || typeof url !== "string") return fallback;
-
-  if (
-    url.includes("/snitch-dashboard/data/dashboard-current.json") ||
-    url === "/data/dashboard-current.json" ||
-    url === "data/dashboard-current.json"
-  ) {
-    return fallback;
-  }
-
-  return url;
+function getDefaultDataUrl() {
+  return `${import.meta.env.BASE_URL}data/dashboard-current.json`;
 }
 
 function TokenCard({ item, onOpen }) {
@@ -541,11 +525,7 @@ export default function SnitchDashboardApp() {
   const [search, setSearch] = useState("");
   const [minScore, setMinScore] = useState("0");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [dataUrl, setDataUrl] = useState(
-  `${import.meta.env.BASE_URL}data/dashboard-current.json`
-);
-    return sanitizeStoredUrl(stored);
-  });
+  const [dataUrl, setDataUrl] = useState(getDefaultDataUrl());
   const [fetchState, setFetchState] = useState("idle");
   const [fetchMessage, setFetchMessage] = useState("Using starter data");
   const [showSourceTools, setShowSourceTools] = useState(false);
@@ -554,25 +534,14 @@ export default function SnitchDashboardApp() {
   const loadParsedData = (parsed, sourceLabel = "Loaded data") => {
     const normalized = normalizeIncomingData(parsed);
     setData(normalized);
-    setSelected(normalized.tradeFocusNow?.[0] ?? normalized.emergingPotential?.[0] ?? normalized.cautionAvoid?.[0] ?? null);
-    localStorage.setItem("snitch-dashboard-data", JSON.stringify(normalized));
+    setSelected(
+      normalized.tradeFocusNow?.[0] ??
+        normalized.emergingPotential?.[0] ??
+        normalized.cautionAvoid?.[0] ??
+        null
+    );
     setFetchMessage(sourceLabel);
   };
-
-  useEffect(() => {
-    const saved = localStorage.getItem("snitch-dashboard-data");
-    if (saved) {
-      try {
-        loadParsedData(JSON.parse(saved), "Loaded saved local data");
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    const cleaned = sanitizeStoredUrl(localStorage.getItem("snitch-dashboard-url"));
-    localStorage.setItem("snitch-dashboard-url", cleaned);
-    setDataUrl(cleaned);
-  }, []);
 
   const fetchRemoteData = async () => {
     if (!dataUrl) return;
@@ -582,7 +551,6 @@ export default function SnitchDashboardApp() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const parsed = await res.json();
       loadParsedData(parsed, `Connected to ${dataUrl}`);
-      localStorage.setItem("snitch-dashboard-url", dataUrl);
       setFetchState("ok");
     } catch {
       setFetchState("warn");
@@ -597,7 +565,6 @@ export default function SnitchDashboardApp() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    fetchRemoteData();
     const id = setInterval(fetchRemoteData, 30000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -618,7 +585,11 @@ export default function SnitchDashboardApp() {
   };
 
   const allCards = useMemo(() => {
-    const merged = [...(data.tradeFocusNow || []), ...(data.emergingPotential || []), ...(data.cautionAvoid || [])];
+    const merged = [
+      ...(data.tradeFocusNow || []),
+      ...(data.emergingPotential || []),
+      ...(data.cautionAvoid || []),
+    ];
     return merged.filter((x) => {
       const scoreOk = Number(x.score || 0) >= Number(minScore || 0);
       const text = `${x.token} ${x.pair} ${x.direction} ${x.action}`.toLowerCase();
@@ -717,7 +688,7 @@ export default function SnitchDashboardApp() {
                       <Input
                         value={dataUrl}
                         onChange={(e) => setDataUrl(e.target.value)}
-                        placeholder={`${import.meta.env.BASE_URL}data/dashboard-current.json`}
+                        placeholder={getDefaultDataUrl()}
                         className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100"
                       />
                     </div>
