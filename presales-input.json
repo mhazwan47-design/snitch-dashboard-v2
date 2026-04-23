@@ -1,0 +1,38 @@
+[
+  {
+    "project": "HelioChain",
+    "stage": "Private round ending",
+    "launchDate": "2026-05-20",
+    "website": "https://example.com",
+    "docsComplete": true,
+    "teamPublic": true,
+    "auditPublished": false,
+    "vestingClear": true,
+    "tokenomicsClear": true,
+    "redFlags": "No major red flag"
+  },
+  {
+    "project": "VaultNet",
+    "stage": "Community presale",
+    "launchDate": "2026-06-03",
+    "website": "https://example.com",
+    "docsComplete": false,
+    "teamPublic": false,
+    "auditPublished": false,
+    "vestingClear": false,
+    "tokenomicsClear": true,
+    "redFlags": "Docs incomplete"
+  },
+  {
+    "project": "Kite Protocol",
+    "stage": "Upcoming launchpad",
+    "launchDate": "2026-05-30",
+    "website": "https://example.com",
+    "docsComplete": true,
+    "teamPublic": true,
+    "auditPublished": true,
+    "vestingClear": true,
+    "tokenomicsClear": true,
+    "redFlags": "Competitive sector"
+  }
+]
