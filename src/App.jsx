@@ -25,7 +25,6 @@ import {
 import {
   Search,
   Bell,
-  ShieldAlert,
   Rocket,
   TrendingUp,
   TriangleAlert,
@@ -293,6 +292,26 @@ function riskBadge(risk) {
   return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
 }
 
+function getBaseDataUrl() {
+  const base = import.meta.env.BASE_URL || "/";
+  return `${base}data/dashboard-current.json`;
+}
+
+function sanitizeStoredUrl(url) {
+  const fallback = getBaseDataUrl();
+  if (!url || typeof url !== "string") return fallback;
+
+  if (
+    url.includes("/snitch-dashboard/data/dashboard-current.json") ||
+    url === "/data/dashboard-current.json" ||
+    url === "data/dashboard-current.json"
+  ) {
+    return fallback;
+  }
+
+  return url;
+}
+
 function TokenCard({ item, onOpen }) {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
@@ -426,7 +445,7 @@ function DetailPanel({ item }) {
                   <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
                   <XAxis dataKey="d" stroke="#94a3b8" />
                   <YAxis stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid #334155', borderRadius: 16 }} />
+                  <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
                   <Area type="monotone" dataKey="score" stroke="#22c55e" fill="url(#grad1)" strokeWidth={3} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -516,13 +535,16 @@ function StatusPill({ status, text }) {
 
 export default function SnitchDashboardApp() {
   const [data, setData] = useState(starterData);
-  const [selected, setSelected] = useState(starterData.tradeFocusNow[0] ?? starterData.emergingPotential[0] ?? starterData.cautionAvoid[0] ?? null);
+  const [selected, setSelected] = useState(
+    starterData.tradeFocusNow[0] ?? starterData.emergingPotential[0] ?? starterData.cautionAvoid[0] ?? null
+  );
   const [search, setSearch] = useState("");
   const [minScore, setMinScore] = useState("0");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [dataUrl, setDataUrl] = useState(
-    localStorage.getItem("snitch-dashboard-url") || `${import.meta.env.BASE_URL}data/dashboard-current.json`
-  );
+  const [dataUrl, setDataUrl] = useState(() => {
+    const stored = localStorage.getItem("snitch-dashboard-url");
+    return sanitizeStoredUrl(stored);
+  });
   const [fetchState, setFetchState] = useState("idle");
   const [fetchMessage, setFetchMessage] = useState("Using starter data");
   const [showSourceTools, setShowSourceTools] = useState(false);
@@ -545,6 +567,12 @@ export default function SnitchDashboardApp() {
     }
   }, []);
 
+  useEffect(() => {
+    const cleaned = sanitizeStoredUrl(localStorage.getItem("snitch-dashboard-url"));
+    localStorage.setItem("snitch-dashboard-url", cleaned);
+    setDataUrl(cleaned);
+  }, []);
+
   const fetchRemoteData = async () => {
     if (!dataUrl) return;
     try {
@@ -563,6 +591,7 @@ export default function SnitchDashboardApp() {
 
   useEffect(() => {
     fetchRemoteData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -570,6 +599,7 @@ export default function SnitchDashboardApp() {
     fetchRemoteData();
     const id = setInterval(fetchRemoteData, 30000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, dataUrl]);
 
   const formatRelativeUpdate = (asOf) => {
@@ -624,10 +654,21 @@ export default function SnitchDashboardApp() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <Badge className="rounded-xl bg-slate-900/80 border border-slate-700 text-slate-200"><Clock3 className="w-3.5 h-3.5 mr-1" />{formatRelativeUpdate(data.meta.asOf)}</Badge>
-              <Badge className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">{data.meta.marketBias}</Badge>
-              <StatusPill status={fetchState === "ok" ? "ok" : fetchState === "warn" ? "warn" : "idle"} text={fetchState === "ok" ? "Live data" : fetchState === "warn" ? "Fallback data" : "Starter data"} />
-              <StatusPill status={autoRefresh ? "ok" : "idle"} text={autoRefresh ? "Auto refresh on" : "Manual refresh"} />
+              <Badge className="rounded-xl bg-slate-900/80 border border-slate-700 text-slate-200">
+                <Clock3 className="w-3.5 h-3.5 mr-1" />
+                {formatRelativeUpdate(data.meta.asOf)}
+              </Badge>
+              <Badge className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                {data.meta.marketBias}
+              </Badge>
+              <StatusPill
+                status={fetchState === "ok" ? "ok" : fetchState === "warn" ? "warn" : "idle"}
+                text={fetchState === "ok" ? "Live data" : fetchState === "warn" ? "Fallback data" : "Starter data"}
+              />
+              <StatusPill
+                status={autoRefresh ? "ok" : "idle"}
+                text={autoRefresh ? "Auto refresh on" : "Manual refresh"}
+              />
             </div>
           </div>
         </motion.div>
@@ -649,8 +690,15 @@ export default function SnitchDashboardApp() {
           <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
             <CardContent className="p-5 sm:p-6 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm text-slate-300"><Database className="w-4 h-4 text-slate-400" />Data Source</div>
-                <Button variant="outline" className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900" onClick={() => setShowSourceTools(v => !v)}>
+                <div className="flex items-center gap-2 text-sm text-slate-300">
+                  <Database className="w-4 h-4 text-slate-400" />
+                  Data Source
+                </div>
+                <Button
+                  variant="outline"
+                  className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
+                  onClick={() => setShowSourceTools((v) => !v)}
+                >
                   {showSourceTools ? "Hide technical tools" : "Show technical tools"}
                 </Button>
               </div>
@@ -665,25 +713,51 @@ export default function SnitchDashboardApp() {
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Link2 className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
-                      <Input value={dataUrl} onChange={(e) => setDataUrl(e.target.value)} placeholder="/data/dashboard-current.json or public JSON URL" className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100" />
+                      <Input
+                        value={dataUrl}
+                        onChange={(e) => setDataUrl(e.target.value)}
+                        placeholder={`${import.meta.env.BASE_URL}data/dashboard-current.json`}
+                        className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100"
+                      />
                     </div>
-                    <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={fetchRemoteData}>Connect</Button>
+                    <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={fetchRemoteData}>
+                      Connect
+                    </Button>
                   </div>
 
                   <div className="flex items-center justify-between gap-2 flex-wrap text-xs text-slate-400">
                     <div className="flex items-center gap-2">
-                      {fetchState === "ok" ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-amber-400" />}
+                      {fetchState === "ok" ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-amber-400" />
+                      )}
                       <span>{fetchMessage}</span>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      <Button variant="outline" className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900" onClick={() => setAutoRefresh((v) => !v)}>
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
+                        onClick={() => setAutoRefresh((v) => !v)}
+                      >
                         <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? "animate-spin" : ""}`} />
                         {autoRefresh ? "Auto Refresh On" : "Auto Refresh Off"}
                       </Button>
-                      <Button variant="outline" className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900" onClick={() => fileRef.current?.click()}>
-                        <Upload className="w-4 h-4 mr-2" />Load JSON
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
+                        onClick={() => fileRef.current?.click()}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Load JSON
                       </Button>
-                      <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && loadJson(e.target.files[0])} />
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="application/json"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && loadJson(e.target.files[0])}
+                      />
                     </div>
                   </div>
                 </>
@@ -697,11 +771,17 @@ export default function SnitchDashboardApp() {
             <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search token, pair, action" className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search token, pair, action"
+                  className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100"
+                />
               </div>
               <Select value={minScore} onValueChange={setMinScore}>
                 <SelectTrigger className="w-full sm:w-44 rounded-2xl bg-slate-900 border-slate-800 text-slate-100">
-                  <Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="Min score" />
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Min score" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-950 border-slate-800 text-slate-100">
                   <SelectItem value="0">Min score 0</SelectItem>
@@ -729,13 +809,28 @@ export default function SnitchDashboardApp() {
               <TabsTrigger value="caution" className="rounded-2xl">Caution</TabsTrigger>
             </TabsList>
             <TabsContent value="focus" className="mt-4">
-              <SectionGrid title="Trade Focus Now" desc="Highest priority names to monitor immediately." items={data.tradeFocusNow.filter(x => allCards.includes(x))} onOpen={setSelected} />
+              <SectionGrid
+                title="Trade Focus Now"
+                desc="Highest priority names to monitor immediately."
+                items={data.tradeFocusNow.filter((x) => allCards.includes(x))}
+                onOpen={setSelected}
+              />
             </TabsContent>
             <TabsContent value="emerging" className="mt-4">
-              <SectionGrid title="Emerging Potential" desc="Early setups that still need confirmation." items={data.emergingPotential.filter(x => allCards.includes(x))} onOpen={setSelected} />
+              <SectionGrid
+                title="Emerging Potential"
+                desc="Early setups that still need confirmation."
+                items={data.emergingPotential.filter((x) => allCards.includes(x))}
+                onOpen={setSelected}
+              />
             </TabsContent>
             <TabsContent value="caution" className="mt-4">
-              <SectionGrid title="Caution / Avoid" desc="Risky or bearish structures that need caution." items={data.cautionAvoid.filter(x => allCards.includes(x))} onOpen={setSelected} />
+              <SectionGrid
+                title="Caution / Avoid"
+                desc="Risky or bearish structures that need caution."
+                items={data.cautionAvoid.filter((x) => allCards.includes(x))}
+                onOpen={setSelected}
+              />
             </TabsContent>
           </Tabs>
 
@@ -810,7 +905,7 @@ export default function SnitchDashboardApp() {
                   <button
                     key={`${r.time}-${r.token}`}
                     onClick={() => {
-                      const found = [...data.tradeFocusNow, ...data.emergingPotential, ...data.cautionAvoid].find(x => x.token === r.token);
+                      const found = [...data.tradeFocusNow, ...data.emergingPotential, ...data.cautionAvoid].find((x) => x.token === r.token);
                       if (found) setSelected(found);
                     }}
                     className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:bg-slate-900 transition"
