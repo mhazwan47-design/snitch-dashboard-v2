@@ -1,1 +1,47 @@
-[]
+[
+  {
+    "token": "WETH",
+    "pair": "WETH/USDC",
+    "direction": "Buy Pressure",
+    "score": 7.4,
+    "impactPct": 0.91,
+    "tradeUsd": 31250.0,
+    "risk": "Medium",
+    "confidence": "Medium",
+    "why": "Strong buy pressure on a liquid pair.",
+    "nextStep": "Open chart now and wait for confirmation.",
+    "doNot": "Do not chase spike.",
+    "cancelIf": "Cancel if buy flow fades.",
+    "actionShort": "WAIT FOR CONFIRMATION"
+  },
+  {
+    "token": "LINK",
+    "pair": "LINK/USDC",
+    "direction": "Buy Pressure",
+    "score": 5.6,
+    "impactPct": 0.31,
+    "tradeUsd": 4200.0,
+    "risk": "Medium",
+    "confidence": "Medium",
+    "why": "Early setup still needs confirmation.",
+    "nextStep": "Watch next 15\u201330 minutes.",
+    "doNot": "Do not enter big size yet.",
+    "cancelIf": "Cancel if follow-through fails.",
+    "actionShort": "WATCH"
+  },
+  {
+    "token": "SOL",
+    "pair": "SOL/cbBTC",
+    "direction": "Sell Pressure",
+    "score": 5.2,
+    "impactPct": 0.97,
+    "tradeUsd": 2780.0,
+    "risk": "High",
+    "confidence": "Medium",
+    "why": "Bearish dominance detected.",
+    "nextStep": "Avoid fresh entry and reduce bullish bias.",
+    "doNot": "Do not catch the dip blindly.",
+    "cancelIf": "Cancel if sell pressure fades.",
+    "actionShort": "REDUCE RISK"
+  }
+]
