@@ -3,7 +3,7 @@
     "product": "SNITCH Alert Dashboard",
     "mode": "Live Monitor",
     "marketBias": "Neutral",
-    "asOf": "2026-04-23 11:05 UTC",
+    "asOf": "2026-04-23 12:07 UTC",
     "dataSource": "collector.py"
   },
   "metrics": {
