@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "product": "SNITCH Alert Dashboard",
+    "mode": "Live Monitor",
+    "marketBias": "Neutral",
+    "asOf": "Bootstrapped",
+    "dataSource": "manual seed"
+  },
+  "metrics": {
+    "qualifiedSignals": 0,
+    "tradeFocus": 0,
+    "emerging": 0,
+    "caution": 0,
+    "avgConfidence": 0,
+    "winRate30d": 0
+  },
+  "tradeFocusNow": [],
+  "emergingPotential": [],
+  "cautionAvoid": [],
+  "recentSignals": [],
+  "performance": {
+    "scoreTrend": [],
+    "actionMix": [],
+    "proof": []
+  }
+}
