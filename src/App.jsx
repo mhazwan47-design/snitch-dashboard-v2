@@ -541,8 +541,9 @@ export default function SnitchDashboardApp() {
   const [search, setSearch] = useState("");
   const [minScore, setMinScore] = useState("0");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [dataUrl, setDataUrl] = useState(() => {
-    const stored = localStorage.getItem("snitch-dashboard-url");
+  const [dataUrl, setDataUrl] = useState(
+  `${import.meta.env.BASE_URL}data/dashboard-current.json`
+);
     return sanitizeStoredUrl(stored);
   });
   const [fetchState, setFetchState] = useState("idle");
