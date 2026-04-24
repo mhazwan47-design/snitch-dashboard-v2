@@ -49,217 +49,48 @@ const starterData = {
     product: "SNITCH Alert Dashboard",
     mode: "Live Monitor",
     marketBias: "Neutral",
-    asOf: "Today, 20:45",
-    dataSource: "On-chain + exchange-enriched signals",
+    asOf: "Bootstrapped",
+    dataSource: "seed",
   },
   metrics: {
-    qualifiedSignals: 12,
-    tradeFocus: 3,
-    emerging: 5,
-    caution: 4,
-    avgConfidence: 68,
-    winRate30d: 58,
+    qualifiedSignals: 0,
+    tradeFocus: 0,
+    emerging: 0,
+    caution: 0,
+    avgConfidence: 0,
+    winRate30d: 0,
   },
-  tradeFocusNow: [
-    {
-      token: "WETH",
-      pair: "WETH/USDC",
-      action: "Prepare Entry",
-      actionShort: "WAIT FOR CONFIRMATION",
-      confidence: "Medium",
-      score: 7.1,
-      direction: "Buy Pressure",
-      impactPct: 0.82,
-      tradeUsd: 28370,
-      liquidityUsd: 15250000,
-      risk: "Medium",
-      why: "Meaningful buy pressure on a liquid pair with clean market structure.",
-      nextStep: "Open chart now and wait for confirmation candle or clean pullback before entry.",
-      doNot: "Do not chase a fast spike.",
-      cancelIf: "Cancel if buy flow fades or price loses short-term support.",
-      binanceTradable: true,
-      history: [
-        { d: "Mon", score: 42 },
-        { d: "Tue", score: 51 },
-        { d: "Wed", score: 57 },
-        { d: "Thu", score: 61 },
-        { d: "Fri", score: 66 },
-        { d: "Sat", score: 71 },
-      ],
-    },
-    {
-      token: "cbBTC",
-      pair: "USDC/cbBTC",
-      action: "Watch Closely",
-      actionShort: "WATCH",
-      confidence: "Medium",
-      score: 6.3,
-      direction: "Buy Pressure",
-      impactPct: 0.55,
-      tradeUsd: 10440,
-      liquidityUsd: 13110000,
-      risk: "Medium",
-      why: "Repeated buy flow detected on a recognized asset.",
-      nextStep: "Keep on active watchlist and wait for next qualifying signal.",
-      doNot: "Do not enter big size immediately.",
-      cancelIf: "Cancel if opposite pressure appears.",
-      binanceTradable: true,
-      history: [
-        { d: "Mon", score: 38 },
-        { d: "Tue", score: 46 },
-        { d: "Wed", score: 48 },
-        { d: "Thu", score: 53 },
-        { d: "Fri", score: 59 },
-        { d: "Sat", score: 63 },
-      ],
-    },
-    {
-      token: "LINK",
-      pair: "LINK/USDC",
-      action: "Prepare Entry",
-      actionShort: "WAIT FOR CONFIRMATION",
-      confidence: "Medium",
-      score: 5.8,
-      direction: "Buy Pressure",
-      impactPct: 0.47,
-      tradeUsd: 6980,
-      liquidityUsd: 2200000,
-      risk: "Medium",
-      why: "Healthy liquidity with improving flow and tradable market context.",
-      nextStep: "Watch next 15–30 minutes and prepare a limit entry plan.",
-      doNot: "Do not force entry before confirmation.",
-      cancelIf: "Cancel if volume fades.",
-      binanceTradable: true,
-      history: [
-        { d: "Mon", score: 28 },
-        { d: "Tue", score: 34 },
-        { d: "Wed", score: 39 },
-        { d: "Thu", score: 44 },
-        { d: "Fri", score: 52 },
-        { d: "Sat", score: 58 },
-      ],
-    },
-  ],
-  emergingPotential: [
-    {
-      token: "SAPIEN",
-      pair: "USDC/SAPIEN",
-      action: "Keep On Watch",
-      actionShort: "WATCH",
-      confidence: "Medium",
-      score: 5.78,
-      direction: "Buy Pressure",
-      impactPct: 0.09,
-      tradeUsd: 879.9,
-      liquidityUsd: 937000,
-      risk: "Medium",
-      why: "Early momentum is forming but setup still needs follow-through.",
-      nextStep: "Monitor next 15–30 minutes for a second strong signal.",
-      doNot: "Do not enter big size yet.",
-      cancelIf: "Cancel if there is no follow-up buy flow.",
-      binanceTradable: false,
-    },
-    {
-      token: "VIRTUAL",
-      pair: "VIRTUAL/WETH",
-      action: "Keep On Watch",
-      actionShort: "WATCH",
-      confidence: "Medium",
-      score: 5.4,
-      direction: "Buy Pressure",
-      impactPct: 0.33,
-      tradeUsd: 2450,
-      liquidityUsd: 746060,
-      risk: "High",
-      why: "Interesting momentum, but risk still elevated and confirmation is required.",
-      nextStep: "Track closely and only act if clean follow-through appears.",
-      doNot: "Do not chase speculative spikes.",
-      cancelIf: "Cancel if flow becomes mixed.",
-      binanceTradable: false,
-    },
-  ],
-  cautionAvoid: [
-    {
-      token: "SOL",
-      pair: "SOL/cbBTC",
-      action: "Reduce Risk",
-      actionShort: "REDUCE RISK",
-      confidence: "Medium",
-      score: 5.22,
-      direction: "Sell Pressure",
-      impactPct: 0.97,
-      tradeUsd: 2780,
-      liquidityUsd: 286820,
-      risk: "High",
-      why: "Bearish dominance detected. This is not a clean long setup.",
-      nextStep: "Avoid fresh entry and reduce bullish bias.",
-      doNot: "Do not catch the dip blindly.",
-      cancelIf: "Cancel if sell pressure fades and structure improves.",
-      binanceTradable: true,
-    },
-    {
-      token: "ETHx",
-      pair: "WETH/ETHx",
-      action: "Avoid Fresh Entry",
-      actionShort: "AVOID",
-      confidence: "Low",
-      score: 5.01,
-      direction: "Sell Pressure",
-      impactPct: 1.73,
-      tradeUsd: 78.49,
-      liquidityUsd: 4540,
-      risk: "High",
-      why: "Thin liquidity and unstable flow increase risk significantly.",
-      nextStep: "Stay out unless structure becomes cleaner.",
-      doNot: "Do not enter on noise.",
-      cancelIf: "Cancel avoid stance only if risk conditions improve.",
-      binanceTradable: false,
-    },
-  ],
-  recentSignals: [
-    { time: "20:41", token: "WETH", pair: "WETH/USDC", direction: "Buy Pressure", action: "WAIT FOR CONFIRMATION", score: 7.1, impact: "0.82%", usd: "$28.37K" },
-    { time: "20:36", token: "SAPIEN", pair: "USDC/SAPIEN", direction: "Buy Pressure", action: "WATCH", score: 5.78, impact: "0.09%", usd: "$879.90" },
-    { time: "20:31", token: "SOL", pair: "SOL/cbBTC", direction: "Sell Pressure", action: "REDUCE RISK", score: 5.22, impact: "0.97%", usd: "$2.78K" },
-    { time: "20:28", token: "ETHx", pair: "WETH/ETHx", direction: "Sell Pressure", action: "AVOID", score: 5.01, impact: "1.73%", usd: "$78.49" },
-  ],
+  marketFunnel: {
+    scanned: 0,
+    rejected: 0,
+    qualified: 0,
+    displayed: 0,
+  },
+  tradeFocusNow: [],
+  emergingPotential: [],
+  cautionAvoid: [],
+  potentialTokens: [],
+  presaleWatchlist: [],
+  recentSignals: [],
   performance: {
-    scoreTrend: [
-      { name: "Mon", focus: 4.1, emerging: 3.4, caution: 2.6 },
-      { name: "Tue", focus: 4.8, emerging: 3.9, caution: 2.8 },
-      { name: "Wed", focus: 5.2, emerging: 4.0, caution: 3.1 },
-      { name: "Thu", focus: 5.6, emerging: 4.4, caution: 3.4 },
-      { name: "Fri", focus: 6.0, emerging: 4.8, caution: 3.0 },
-      { name: "Sat", focus: 6.4, emerging: 5.1, caution: 3.6 },
-    ],
-    actionMix: [
-      { name: "Prepare / Wait", value: 42 },
-      { name: "Watch", value: 33 },
-      { name: "Avoid / Reduce", value: 25 },
-    ],
-    proof: [
-      { metric: "Qualified Signals", value: "12" },
-      { metric: "30D Win Rate", value: "58%" },
-      { metric: "Avg Confidence", value: "68/100" },
-      { metric: "Risk-Off Alerts", value: "4" },
-    ],
+    scoreTrend: [],
+    actionMix: [],
+    proof: [],
   },
 };
 
 function normalizeIncomingData(raw) {
   if (!raw || typeof raw !== "object") return starterData;
   return {
-    meta: {
-      ...starterData.meta,
-      ...(raw.meta || {}),
-    },
-    metrics: {
-      ...starterData.metrics,
-      ...(raw.metrics || {}),
-    },
-    tradeFocusNow: Array.isArray(raw.tradeFocusNow) ? raw.tradeFocusNow : starterData.tradeFocusNow,
-    emergingPotential: Array.isArray(raw.emergingPotential) ? raw.emergingPotential : starterData.emergingPotential,
-    cautionAvoid: Array.isArray(raw.cautionAvoid) ? raw.cautionAvoid : starterData.cautionAvoid,
-    recentSignals: Array.isArray(raw.recentSignals) ? raw.recentSignals : starterData.recentSignals,
+    meta: { ...starterData.meta, ...(raw.meta || {}) },
+    metrics: { ...starterData.metrics, ...(raw.metrics || {}) },
+    marketFunnel: { ...starterData.marketFunnel, ...(raw.marketFunnel || {}) },
+    tradeFocusNow: Array.isArray(raw.tradeFocusNow) ? raw.tradeFocusNow : [],
+    emergingPotential: Array.isArray(raw.emergingPotential) ? raw.emergingPotential : [],
+    cautionAvoid: Array.isArray(raw.cautionAvoid) ? raw.cautionAvoid : [],
+    potentialTokens: Array.isArray(raw.potentialTokens) ? raw.potentialTokens : [],
+    presaleWatchlist: Array.isArray(raw.presaleWatchlist) ? raw.presaleWatchlist : [],
+    recentSignals: Array.isArray(raw.recentSignals) ? raw.recentSignals : [],
     performance: {
       ...starterData.performance,
       ...(raw.performance || {}),
@@ -269,6 +100,7 @@ function normalizeIncomingData(raw) {
 
 function fmtUsd(v) {
   if (typeof v !== "number") return v;
+  if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
   if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(2)}K`;
   return `$${v.toFixed(2)}`;
@@ -281,8 +113,12 @@ function scoreColor(score) {
 }
 
 function actionBadge(action) {
-  if (["BUY NOW", "PREPARE ENTRY", "WAIT FOR CONFIRMATION"].includes(action)) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  if (["WATCH", "KEEP ON WATCH"].includes(action)) return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+  if (["BUY NOW", "PREPARE ENTRY", "WAIT FOR CONFIRMATION"].includes(action)) {
+    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  }
+  if (["WATCH", "KEEP ON WATCH"].includes(action)) {
+    return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+  }
   return "bg-rose-500/15 text-rose-300 border-rose-500/30";
 }
 
@@ -296,156 +132,12 @@ function getDefaultDataUrl() {
   return `${import.meta.env.BASE_URL}data/dashboard-current.json`;
 }
 
-function TokenCard({ item, onOpen }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl backdrop-blur">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-slate-50 text-xl">{item.token}</CardTitle>
-              <CardDescription className="text-slate-400 mt-1">{item.pair}</CardDescription>
-            </div>
-            <Badge className={actionBadge(item.actionShort || item.action)}>{item.actionShort || item.action}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-              <div className="text-slate-400">Score</div>
-              <div className={`text-2xl font-semibold ${scoreColor(item.score)}`}>{item.score}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-              <div className="text-slate-400">Risk</div>
-              <div className="mt-1"><Badge className={riskBadge(item.risk)}>{item.risk}</Badge></div>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-xs text-slate-400 mb-2">
-              <span>Signal Strength</span>
-              <span>{Math.round(item.score * 10)}/100</span>
-            </div>
-            <Progress value={Math.min(100, Math.round(item.score * 10))} className="h-2 bg-slate-800" />
-          </div>
-          <div className="text-sm text-slate-300 leading-6">{item.why}</div>
-          <div className="grid grid-cols-2 gap-3 text-sm text-slate-300">
-            <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
-              <div className="text-slate-400 text-xs">Trade USD</div>
-              <div className="font-medium">{fmtUsd(item.tradeUsd)}</div>
-            </div>
-            <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
-              <div className="text-slate-400 text-xs">Impact</div>
-              <div className="font-medium">{item.impactPct}%</div>
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={() => onOpen(item)}>
-              <Eye className="w-4 h-4 mr-2" />Open Detail
-            </Button>
-            <Button variant="outline" className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900">
-              <Bell className="w-4 h-4 mr-2" />Set Alert
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-function DetailPanel({ item }) {
-  if (!item) {
-    return (
-      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl h-full">
-        <CardContent className="p-8 text-slate-400 flex items-center justify-center h-full min-h-[420px]">
-          Select a token card to view the full action plan.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl overflow-hidden">
-      <CardHeader className="border-b border-slate-800 bg-gradient-to-r from-slate-950 to-slate-900">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <CardTitle className="text-slate-50 text-2xl">{item.token}</CardTitle>
-            <CardDescription className="text-slate-400 mt-1">{item.pair} · {item.direction}</CardDescription>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Badge className={actionBadge(item.actionShort || item.action)}>{item.actionShort || item.action}</Badge>
-            <Badge className={riskBadge(item.risk)}>{item.risk}</Badge>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-6 space-y-6">
-        <div className="grid md:grid-cols-3 gap-4">
-          <StatCard icon={Gauge} label="Action Score" value={String(item.score)} />
-          <StatCard icon={Activity} label="Liquidity Impact" value={`${item.impactPct}%`} />
-          <StatCard icon={Wallet} label="Trade Value" value={fmtUsd(item.tradeUsd)} />
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
-            <CardHeader>
-              <CardTitle className="text-base text-slate-100">Next Practical Action</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-300 leading-6">
-              <ActionLine title="Action Now" body={item.action} />
-              <ActionLine title="What it means" body={item.why} />
-              <ActionLine title="What to do next" body={item.nextStep} />
-              <ActionLine title="Do not do" body={item.doNot} />
-              <ActionLine title="Cancel plan if" body={item.cancelIf} />
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
-            <CardHeader>
-              <CardTitle className="text-base text-slate-100">Signal Meter</CardTitle>
-              <CardDescription className="text-slate-400">Momentum and confidence snapshot</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Meter label="Setup Quality" value={Math.min(100, item.score * 10)} />
-              <Meter label="Conviction" value={item.confidence === "High" ? 84 : item.confidence === "Medium" ? 66 : 38} />
-              <Meter label="Risk Control" value={item.risk === "High" ? 35 : item.risk === "Medium" ? 62 : 84} inverse />
-            </CardContent>
-          </Card>
-        </div>
-
-        {item.history && (
-          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
-            <CardHeader>
-              <CardTitle className="text-base text-slate-100">Recent Performance Matrix</CardTitle>
-              <CardDescription className="text-slate-400">Signal score trend for this token</CardDescription>
-            </CardHeader>
-            <CardContent className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={item.history}>
-                  <defs>
-                    <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
-                  <XAxis dataKey="d" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
-                  <Area type="monotone" dataKey="score" stroke="#22c55e" fill="url(#grad1)" strokeWidth={3} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function StatCard({ icon: Icon, label, value }) {
   return (
     <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4">
       <div className="flex items-center gap-2 text-slate-400 text-sm">
-        <Icon className="w-4 h-4" />{label}
+        <Icon className="w-4 h-4" />
+        {label}
       </div>
       <div className="text-slate-50 text-2xl font-semibold mt-2">{value}</div>
     </div>
@@ -478,10 +170,100 @@ function MiniMetric({ icon: Icon, label, value }) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
       <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-wide">
-        <Icon className="w-4 h-4" />{label}
+        <Icon className="w-4 h-4" />
+        {label}
       </div>
       <div className="text-slate-50 text-2xl font-semibold mt-2">{value}</div>
     </div>
+  );
+}
+
+function StatusPill({ status, text }) {
+  const tone =
+    status === "ok"
+      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+      : status === "warn"
+      ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+      : "bg-slate-700/50 text-slate-300 border-slate-700";
+
+  return <Badge className={`rounded-xl ${tone}`}>{text}</Badge>;
+}
+
+function FunnelCard({ label, value, tone = "slate" }) {
+  const toneMap = {
+    emerald: "text-emerald-300 border-emerald-500/20 bg-emerald-500/5",
+    amber: "text-amber-300 border-amber-500/20 bg-amber-500/5",
+    rose: "text-rose-300 border-rose-500/20 bg-rose-500/5",
+    slate: "text-slate-100 border-slate-800 bg-slate-900/70",
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneMap[tone] || toneMap.slate}`}>
+      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-2 text-3xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function TokenCard({ item, onOpen }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl backdrop-blur">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-slate-50 text-xl">{item.token}</CardTitle>
+              <CardDescription className="text-slate-400 mt-1">{item.pair}</CardDescription>
+            </div>
+            <Badge className={actionBadge(item.actionShort || item.action)}>
+              {item.actionShort || item.action}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+              <div className="text-slate-400">Score</div>
+              <div className={`text-2xl font-semibold ${scoreColor(item.score)}`}>{item.score}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+              <div className="text-slate-400">Risk</div>
+              <div className="mt-1">
+                <Badge className={riskBadge(item.risk)}>{item.risk}</Badge>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-xs text-slate-400 mb-2">
+              <span>Signal Strength</span>
+              <span>{Math.round((item.score || 0) * 10)}/100</span>
+            </div>
+            <Progress value={Math.min(100, Math.round((item.score || 0) * 10))} className="h-2 bg-slate-800" />
+          </div>
+          <div className="text-sm text-slate-300 leading-6">{item.why}</div>
+          <div className="grid grid-cols-2 gap-3 text-sm text-slate-300">
+            <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
+              <div className="text-slate-400 text-xs">Trade USD</div>
+              <div className="font-medium">{fmtUsd(item.tradeUsd)}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
+              <div className="text-slate-400 text-xs">Impact</div>
+              <div className="font-medium">{item.impactPct}%</div>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={() => onOpen(item)}>
+              <Eye className="w-4 h-4 mr-2" />
+              Open Detail
+            </Button>
+            <Button variant="outline" className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900">
+              <Bell className="w-4 h-4 mr-2" />
+              Set Alert
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
 
@@ -500,28 +282,221 @@ function SectionGrid({ title, desc, items, onOpen }) {
         </Card>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
-          {items.map((item) => <TokenCard key={`${item.token}-${item.pair}`} item={item} onOpen={onOpen} />)}
+          {items.map((item) => (
+            <TokenCard key={`${item.token}-${item.pair}`} item={item} onOpen={onOpen} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function StatusPill({ status, text }) {
-  const tone = status === "ok"
-    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-    : status === "warn"
-    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-    : "bg-slate-700/50 text-slate-300 border-slate-700";
+function DetailPanel({ item }) {
+  if (!item) {
+    return (
+      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl h-full">
+        <CardContent className="p-8 text-slate-400 flex items-center justify-center h-full min-h-[420px]">
+          Select a token card to view the full action plan.
+        </CardContent>
+      </Card>
+    );
+  }
 
-  return <Badge className={`rounded-xl ${tone}`}>{text}</Badge>;
+  return (
+    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl overflow-hidden">
+      <CardHeader className="border-b border-slate-800 bg-gradient-to-r from-slate-950 to-slate-900">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className="text-slate-50 text-2xl">{item.token}</CardTitle>
+            <CardDescription className="text-slate-400 mt-1">
+              {item.pair} · {item.direction}
+            </CardDescription>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Badge className={actionBadge(item.actionShort || item.action)}>
+              {item.actionShort || item.action}
+            </Badge>
+            <Badge className={riskBadge(item.risk)}>{item.risk}</Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-6 space-y-6">
+        <div className="grid md:grid-cols-3 gap-4">
+          <StatCard icon={Gauge} label="Action Score" value={String(item.score)} />
+          <StatCard icon={Activity} label="Liquidity Impact" value={`${item.impactPct}%`} />
+          <StatCard icon={Wallet} label="Trade Value" value={fmtUsd(item.tradeUsd)} />
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
+            <CardHeader>
+              <CardTitle className="text-base text-slate-100">Next Practical Action</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-300 leading-6">
+              <ActionLine title="Action Now" body={item.action} />
+              <ActionLine title="What it means" body={item.why} />
+              <ActionLine title="What to do next" body={item.nextStep} />
+              <ActionLine title="Do not do" body={item.doNot} />
+              <ActionLine title="Cancel plan if" body={item.cancelIf} />
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
+            <CardHeader>
+              <CardTitle className="text-base text-slate-100">Signal Meter</CardTitle>
+              <CardDescription className="text-slate-400">
+                Momentum and confidence snapshot
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Meter label="Setup Quality" value={Math.min(100, (item.score || 0) * 10)} />
+              <Meter
+                label="Conviction"
+                value={item.confidence === "High" ? 84 : item.confidence === "Medium" ? 66 : 38}
+              />
+              <Meter
+                label="Risk Control"
+                value={item.risk === "High" ? 35 : item.risk === "Medium" ? 62 : 84}
+                inverse
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        {item.history && Array.isArray(item.history) && item.history.length > 0 && (
+          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
+            <CardHeader>
+              <CardTitle className="text-base text-slate-100">Recent Performance Matrix</CardTitle>
+              <CardDescription className="text-slate-400">
+                Signal score trend for this token
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={item.history}>
+                  <defs>
+                    <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+                  <XAxis dataKey="d" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
+                  <Area type="monotone" dataKey="score" stroke="#22c55e" fill="url(#grad1)" strokeWidth={3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PotentialTokenTable({ items }) {
+  return (
+    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-slate-100">Potential Tokens</CardTitle>
+        <CardDescription className="text-slate-400">
+          Broader opportunities beyond the current qualified shortlist.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {items.length === 0 ? (
+            <div className="text-slate-400">No potential tokens found right now.</div>
+          ) : (
+            items.map((item) => (
+              <div key={item.token} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="text-slate-50 font-semibold text-lg">{item.token}</div>
+                    <div className="text-slate-400 text-sm mt-1">{item.thesis}</div>
+                  </div>
+                  <Badge
+                    className={
+                      item.confidence === "Low"
+                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                        : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                    }
+                  >
+                    {item.confidence}
+                  </Badge>
+                </div>
+                <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-2 mt-4 text-sm">
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Price</span><span className="text-slate-50">{item.price}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">FDV</span><span className="text-slate-50">{item.fdv}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Liquidity</span><span className="text-slate-50">{item.liquidity}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">24H Volume</span><span className="text-slate-50">{item.volume24h}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Stage</span><span className="text-slate-50">{item.listingStage}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Tradability</span><span className="text-slate-50">{item.exchange}</span></div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PresaleWatchlist({ items }) {
+  return (
+    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-slate-100">Presale Watchlist</CardTitle>
+        <CardDescription className="text-slate-400">
+          Not guaranteed trusted. Use this as a structured watchlist with red-flag awareness.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {items.length === 0 ? (
+            <div className="text-slate-400">No presale watchlist items right now.</div>
+          ) : (
+            items.map((item) => (
+              <div key={item.project} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="text-slate-50 font-semibold">{item.project}</div>
+                    <div className="text-slate-400 text-sm mt-1">
+                      {item.stage} · {item.launchDate}
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      item.action === "High caution"
+                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                        : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                    }
+                  >
+                    {item.action}
+                  </Badge>
+                </div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-2 mt-4 text-sm">
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Trust Score</span><span className="text-slate-50">{item.trustScore}/100</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Tokenomics</span><span className="text-slate-50">{item.tokenomicsScore}/100</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Vesting</span><span className="text-slate-50">{item.vesting}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Audit</span><span className="text-slate-50">{item.audit}</span></div>
+                </div>
+                <div className="mt-3 text-sm text-slate-400">
+                  Red flags: <span className="text-slate-200">{item.redFlags}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SnitchDashboardApp() {
   const [data, setData] = useState(starterData);
-  const [selected, setSelected] = useState(
-    starterData.tradeFocusNow[0] ?? starterData.emergingPotential[0] ?? starterData.cautionAvoid[0] ?? null
-  );
+  const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [minScore, setMinScore] = useState("0");
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -560,19 +535,18 @@ export default function SnitchDashboardApp() {
 
   useEffect(() => {
     fetchRemoteData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(fetchRemoteData, 30000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, dataUrl]);
 
   const formatRelativeUpdate = (asOf) => {
     if (!asOf) return "Update time unavailable";
-    const parsed = new Date(asOf.replace(" UTC", "Z"));
+    if (String(asOf).includes("Bootstrapped")) return `Last sync: ${asOf}`;
+    const parsed = new Date(String(asOf).replace(" UTC", "Z"));
     if (Number.isNaN(parsed.getTime())) return `Last sync: ${asOf}`;
     const diffMs = Date.now() - parsed.getTime();
     const diffMin = Math.max(0, Math.floor(diffMs / 60000));
@@ -601,6 +575,7 @@ export default function SnitchDashboardApp() {
   const perfBars = data.performance.scoreTrend || [];
   const pieData = data.performance.actionMix || [];
   const COLORS = ["#22c55e", "#f59e0b", "#ef4444"];
+  const funnel = data.marketFunnel || starterData.marketFunnel;
 
   const loadJson = async (file) => {
     const text = await file.text();
@@ -637,10 +612,7 @@ export default function SnitchDashboardApp() {
                 status={fetchState === "ok" ? "ok" : fetchState === "warn" ? "warn" : "idle"}
                 text={fetchState === "ok" ? "Live data" : fetchState === "warn" ? "Fallback data" : "Starter data"}
               />
-              <StatusPill
-                status={autoRefresh ? "ok" : "idle"}
-                text={autoRefresh ? "Auto refresh on" : "Manual refresh"}
-              />
+              <StatusPill status={autoRefresh ? "ok" : "idle"} text={autoRefresh ? "Auto refresh on" : "Manual refresh"} />
             </div>
           </div>
         </motion.div>
@@ -781,28 +753,13 @@ export default function SnitchDashboardApp() {
               <TabsTrigger value="caution" className="rounded-2xl">Caution</TabsTrigger>
             </TabsList>
             <TabsContent value="focus" className="mt-4">
-              <SectionGrid
-                title="Trade Focus Now"
-                desc="Highest priority names to monitor immediately."
-                items={data.tradeFocusNow.filter((x) => allCards.includes(x))}
-                onOpen={setSelected}
-              />
+              <SectionGrid title="Trade Focus Now" desc="Highest priority names to monitor immediately." items={data.tradeFocusNow.filter((x) => allCards.includes(x))} onOpen={setSelected} />
             </TabsContent>
             <TabsContent value="emerging" className="mt-4">
-              <SectionGrid
-                title="Emerging Potential"
-                desc="Early setups that still need confirmation."
-                items={data.emergingPotential.filter((x) => allCards.includes(x))}
-                onOpen={setSelected}
-              />
+              <SectionGrid title="Emerging Potential" desc="Early setups that still need confirmation." items={data.emergingPotential.filter((x) => allCards.includes(x))} onOpen={setSelected} />
             </TabsContent>
             <TabsContent value="caution" className="mt-4">
-              <SectionGrid
-                title="Caution / Avoid"
-                desc="Risky or bearish structures that need caution."
-                items={data.cautionAvoid.filter((x) => allCards.includes(x))}
-                onOpen={setSelected}
-              />
+              <SectionGrid title="Caution / Avoid" desc="Risky or bearish structures that need caution." items={data.cautionAvoid.filter((x) => allCards.includes(x))} onOpen={setSelected} />
             </TabsContent>
           </Tabs>
 
@@ -819,7 +776,9 @@ export default function SnitchDashboardApp() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95} paddingAngle={3}>
-                    {pieData.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
+                    {pieData.map((entry, index) => (
+                      <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                    ))}
                   </Pie>
                   <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
                   <Legend />
@@ -850,14 +809,14 @@ export default function SnitchDashboardApp() {
           </Card>
         </div>
 
-        <div className="grid xl:grid-cols-[0.9fr_1.1fr] gap-6">
+        <div className="grid xl:grid-cols-[0.9fr_1.1fr] gap-6 mb-6">
           <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
             <CardHeader>
               <CardTitle className="text-slate-100">Proof Snapshot</CardTitle>
               <CardDescription className="text-slate-400">Quick performance metrics</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3">
-              {data.performance.proof.map((p) => (
+              {(data.performance.proof || []).map((p) => (
                 <div key={p.metric} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                   <div className="text-slate-400 text-xs">{p.metric}</div>
                   <div className="text-slate-50 text-2xl font-semibold mt-2">{p.value}</div>
@@ -873,7 +832,7 @@ export default function SnitchDashboardApp() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {data.recentSignals.map((r) => (
+                {(data.recentSignals || []).map((r) => (
                   <button
                     key={`${r.time}-${r.token}`}
                     onClick={() => {
@@ -895,21 +854,64 @@ export default function SnitchDashboardApp() {
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                        Score <span className="text-slate-50 ml-1">{r.score}</span>
-                      </div>
-                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                        Impact <span className="text-slate-50 ml-1">{r.impact}</span>
-                      </div>
-                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                        USD <span className="text-slate-50 ml-1">{r.usd}</span>
-                      </div>
+                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Score <span className="text-slate-50 ml-1">{r.score}</span></div>
+                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Impact <span className="text-slate-50 ml-1">{r.impact}</span></div>
+                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">USD <span className="text-slate-50 ml-1">{r.usd}</span></div>
                     </div>
                   </button>
                 ))}
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-6 mb-6">
+          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+            <CardHeader>
+              <CardTitle className="text-slate-100">Scan Funnel</CardTitle>
+              <CardDescription className="text-slate-400">See how much the engine scanned versus what survived filtering.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <FunnelCard label="Scanned" value={funnel.scanned} tone="slate" />
+              <FunnelCard label="Rejected" value={funnel.rejected} tone="rose" />
+              <FunnelCard label="Qualified" value={funnel.qualified} tone="emerald" />
+              <FunnelCard label="Displayed" value={funnel.displayed} tone="amber" />
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+            <CardHeader>
+              <CardTitle className="text-slate-100">Tradability Confidence</CardTitle>
+              <CardDescription className="text-slate-400">
+                Use this to separate early ideas from names you can trade with more confidence.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-300">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <div className="text-slate-100 font-medium mb-2">Trade with more confidence</div>
+                <div className="text-slate-400">Listed or watchable on major venues, enough liquidity, and better execution conditions.</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[...data.tradeFocusNow, ...data.emergingPotential].filter((x) => x.binanceTradable).map((x) => (
+                    <Badge key={x.token} className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">{x.token}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <div className="text-slate-100 font-medium mb-2">Watch but size carefully</div>
+                <div className="text-slate-400">Potential exists, but venue/liquidity/risk means smaller size or slower confirmation.</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[...data.emergingPotential, ...data.cautionAvoid].filter((x) => !x.binanceTradable).map((x) => (
+                    <Badge key={x.token} className="bg-amber-500/15 text-amber-300 border-amber-500/30">{x.token}</Badge>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6">
+          <PotentialTokenTable items={data.potentialTokens || []} />
+          <PresaleWatchlist items={data.presaleWatchlist || []} />
         </div>
       </div>
     </div>
