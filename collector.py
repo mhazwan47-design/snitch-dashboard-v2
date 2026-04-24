@@ -15,11 +15,10 @@ BINANCE_EXCHANGE_INFO = "https://api.binance.com/api/v3/exchangeInfo"
 
 CG_API_KEY = os.getenv("COINGECKO_API_KEY", "").strip()
 REQUEST_TIMEOUT = 30
-
 PREFERRED_QUOTES = {"USDT", "FDUSD", "USDC", "BTC", "ETH"}
 
 
-def now_utc_text() -> str:
+def now_utc_text():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
@@ -36,11 +35,11 @@ def fmt_money(v):
     return f"${v:.2f}"
 
 
-def clamp(v: float, lo: float, hi: float) -> float:
+def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
-def safe_float(v, default=0.0) -> float:
+def safe_float(v, default=0.0):
     try:
         if v is None:
             return default
@@ -49,7 +48,7 @@ def safe_float(v, default=0.0) -> float:
         return default
 
 
-def safe_int(v, default=0) -> int:
+def safe_int(v, default=0):
     try:
         if v is None:
             return default
@@ -58,7 +57,7 @@ def safe_int(v, default=0) -> int:
         return default
 
 
-def get_cg_headers() -> dict:
+def get_cg_headers():
     if not CG_API_KEY:
         return {}
     return {
@@ -67,7 +66,7 @@ def get_cg_headers() -> dict:
     }
 
 
-def fetch_coingecko_markets(pages: int = 2, per_page: int = 250) -> list[dict]:
+def fetch_coingecko_markets(pages=2, per_page=250):
     headers = get_cg_headers()
     out = []
 
@@ -80,12 +79,7 @@ def fetch_coingecko_markets(pages: int = 2, per_page: int = 250) -> list[dict]:
             "sparkline": "false",
             "price_change_percentage": "24h",
         }
-        r = requests.get(
-            COINGECKO_URL,
-            params=params,
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-        )
+        r = requests.get(COINGECKO_URL, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         rows = r.json()
         if not isinstance(rows, list) or not rows:
@@ -95,12 +89,8 @@ def fetch_coingecko_markets(pages: int = 2, per_page: int = 250) -> list[dict]:
     return out
 
 
-def fetch_binance_spot_map() -> dict[str, list[str]]:
-    r = requests.get(
-        BINANCE_EXCHANGE_INFO,
-        params={"permissions": "SPOT"},
-        timeout=REQUEST_TIMEOUT,
-    )
+def fetch_binance_spot_map():
+    r = requests.get(BINANCE_EXCHANGE_INFO, params={"permissions": "SPOT"}, timeout=REQUEST_TIMEOUT)
     r.raise_for_status()
     data = r.json()
 
@@ -119,7 +109,7 @@ def fetch_binance_spot_map() -> dict[str, list[str]]:
     return symbol_map
 
 
-def tradability_bucket(binance_pairs: list[str]) -> tuple[bool, str]:
+def tradability_bucket(binance_pairs):
     if not binance_pairs:
         return False, "DEX / minor venue"
     majors = [p for p in binance_pairs if p.endswith("USDT") or p.endswith("FDUSD") or p.endswith("USDC")]
@@ -128,7 +118,7 @@ def tradability_bucket(binance_pairs: list[str]) -> tuple[bool, str]:
     return True, "Listed but less ideal pair"
 
 
-def score_row(row: dict, tradable: bool) -> float:
+def score_row(row, tradable):
     rank = safe_int(row.get("market_cap_rank"), 999999)
     price_change_24h = safe_float(row.get("price_change_percentage_24h"), 0.0)
     volume = safe_float(row.get("total_volume"), 0.0)
@@ -151,7 +141,7 @@ def score_row(row: dict, tradable: bool) -> float:
     return round(clamp(final, 0, 10), 2)
 
 
-def build_signal_item(row: dict, binance_pairs: list[str]) -> dict:
+def build_signal_item(row, binance_pairs):
     symbol = (row.get("symbol") or "").upper()
     name = row.get("name") or symbol
     price = safe_float(row.get("current_price"))
@@ -217,7 +207,7 @@ def build_signal_item(row: dict, binance_pairs: list[str]) -> dict:
     }
 
 
-def select_focus_emerging_caution(items: list[dict]) -> tuple[list[dict], list[dict], list[dict], int]:
+def select_focus_emerging_caution(items):
     qualified = []
     rejected = 0
 
@@ -241,16 +231,18 @@ def select_focus_emerging_caution(items: list[dict]) -> tuple[list[dict], list[d
     return focus, emerging, caution, rejected
 
 
-def build_potential_tokens(items: list[dict]) -> list[dict]:
+def build_potential_tokens(items):
     candidates = []
     for item in items:
         fdv = safe_float(item.get("fdv"))
         volume = safe_float(item.get("volume24h"))
         price = safe_float(item.get("currentPrice"))
+
         if volume < 1_000_000:
             continue
         if fdv <= 0 or fdv > 80_000_000:
             continue
+
         confidence = "Medium" if item.get("binanceTradable") else "Low"
         stage = "New listing / low FDV" if safe_int(item.get("marketCapRank"), 999999) > 150 else "Expansion phase"
 
@@ -269,7 +261,7 @@ def build_potential_tokens(items: list[dict]) -> list[dict]:
     return candidates[:8]
 
 
-def load_presales() -> list[dict]:
+def load_presales():
     if not PRESALES_FILE.exists():
         return []
 
@@ -306,7 +298,7 @@ def load_presales() -> list[dict]:
     return sorted(out, key=lambda x: x["trustScore"], reverse=True)
 
 
-def build_recent(items: list[dict]) -> list[dict]:
+def build_recent(items):
     recents = []
     for item in sorted(items, key=lambda x: (x["score"], x["tradeUsd"]), reverse=True)[:12]:
         recents.append({
@@ -322,7 +314,7 @@ def build_recent(items: list[dict]) -> list[dict]:
     return recents
 
 
-def build_action_mix(focus: list[dict], emerging: list[dict], caution: list[dict]) -> list[dict]:
+def build_action_mix(focus, emerging, caution):
     return [
         {"name": "Prepare / Wait", "value": len(focus)},
         {"name": "Watch", "value": len(emerging)},
@@ -330,7 +322,7 @@ def build_action_mix(focus: list[dict], emerging: list[dict], caution: list[dict
     ]
 
 
-def build_score_trend(focus: list[dict], emerging: list[dict], caution: list[dict]) -> list[dict]:
+def build_score_trend(focus, emerging, caution):
     f = round(sum(x["score"] for x in focus) / max(len(focus), 1), 1)
     e = round(sum(x["score"] for x in emerging) / max(len(emerging), 1), 1)
     c = round(sum(x["score"] for x in caution) / max(len(caution), 1), 1)
@@ -342,6 +334,11 @@ def build_score_trend(focus: list[dict], emerging: list[dict], caution: list[dic
         {"name": "Fri", "focus": max(0, round(f - 0.1, 1)), "emerging": max(0, round(e - 0.1, 1)), "caution": max(0, round(c - 0.1, 1))},
         {"name": "Sat", "focus": f, "emerging": e, "caution": c},
     ]
+
+
+def write_output(output):
+    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OUT_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
 
 def main():
@@ -398,9 +395,7 @@ def main():
             },
         }
 
-        OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        OUT_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
-
+        write_output(output)
         print(f"Wrote {OUT_FILE}")
         print(f"Scanned={len(enriched)} Rejected={rejected} Qualified={qualified_count}")
 
@@ -441,8 +436,7 @@ def main():
                 ],
             },
         }
-        OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        OUT_FILE.write_text(json.dumps(error_output, indent=2), encoding="utf-8")
+        write_output(error_output)
         print(f"Collector failed: {e}")
 
 
