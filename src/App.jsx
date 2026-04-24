@@ -42,6 +42,10 @@ import {
   Database,
   CheckCircle2,
   AlertCircle,
+  ShieldAlert,
+  Coins,
+  LineChart,
+  Layers3,
 } from "lucide-react";
 
 const starterData = {
@@ -65,6 +69,7 @@ const starterData = {
     rejected: 0,
     qualified: 0,
     displayed: 0,
+    rejectReasons: {},
   },
   tradeFocusNow: [],
   emergingPotential: [],
@@ -205,21 +210,53 @@ function FunnelCard({ label, value, tone = "slate" }) {
   );
 }
 
+function RejectReasonCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-rose-300">{value}</div>
+    </div>
+  );
+}
+
+function classifyQualityBand(item) {
+  const score = Number(item?.score || 0);
+  const impact = Number(item?.impactPct || 0);
+  const risk = item?.risk || "High";
+  const tradeUsd = Number(item?.tradeUsd || 0);
+
+  if (score >= 8.8 && impact >= 1.0 && tradeUsd >= 30_000_000) return "Sniper";
+  if (score >= 7.2 && risk !== "High") return "Balanced";
+  return "Speculative";
+}
+
+function qualityBadge(quality) {
+  if (quality === "Sniper") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  if (quality === "Balanced") return "bg-cyan-500/15 text-cyan-300 border-cyan-500/30";
+  return "bg-violet-500/15 text-violet-300 border-violet-500/30";
+}
+
 function TokenCard({ item, onOpen }) {
+  const quality = classifyQualityBand(item);
+
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
       <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl backdrop-blur">
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <CardTitle className="text-slate-50 text-xl">{item.token}</CardTitle>
               <CardDescription className="text-slate-400 mt-1">{item.pair}</CardDescription>
             </div>
-            <Badge className={actionBadge(item.actionShort || item.action)}>
-              {item.actionShort || item.action}
-            </Badge>
+            <div className="flex gap-2 flex-wrap justify-end">
+              <Badge className={qualityBadge(quality)}>{quality}</Badge>
+              <Badge className={actionBadge(item.actionShort || item.action)}>
+                {item.actionShort || item.action}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
+
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
@@ -233,14 +270,17 @@ function TokenCard({ item, onOpen }) {
               </div>
             </div>
           </div>
+
           <div>
             <div className="flex justify-between text-xs text-slate-400 mb-2">
               <span>Signal Strength</span>
-              <span>{Math.round((item.score || 0) * 10)}/100</span>
+              <span>{Math.min(100, Math.round((item.score || 0) * 10))}/100</span>
             </div>
             <Progress value={Math.min(100, Math.round((item.score || 0) * 10))} className="h-2 bg-slate-800" />
           </div>
+
           <div className="text-sm text-slate-300 leading-6">{item.why}</div>
+
           <div className="grid grid-cols-2 gap-3 text-sm text-slate-300">
             <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
               <div className="text-slate-400 text-xs">Trade USD</div>
@@ -251,6 +291,7 @@ function TokenCard({ item, onOpen }) {
               <div className="font-medium">{item.impactPct}%</div>
             </div>
           </div>
+
           <div className="flex gap-2 pt-1">
             <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={() => onOpen(item)}>
               <Eye className="w-4 h-4 mr-2" />
@@ -276,6 +317,7 @@ function SectionGrid({ title, desc, items, onOpen }) {
           <CardDescription className="text-slate-400">{desc}</CardDescription>
         </CardHeader>
       </Card>
+
       {items.length === 0 ? (
         <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
           <CardContent className="p-8 text-slate-400">No clean setup in this section right now.</CardContent>
@@ -317,9 +359,11 @@ function DetailPanel({ item }) {
               {item.actionShort || item.action}
             </Badge>
             <Badge className={riskBadge(item.risk)}>{item.risk}</Badge>
+            <Badge className={qualityBadge(classifyQualityBand(item))}>{classifyQualityBand(item)}</Badge>
           </div>
         </div>
       </CardHeader>
+
       <CardContent className="p-6 space-y-6">
         <div className="grid md:grid-cols-3 gap-4">
           <StatCard icon={Gauge} label="Action Score" value={String(item.score)} />
@@ -395,7 +439,7 @@ function DetailPanel({ item }) {
   );
 }
 
-function PotentialTokenTable({ items }) {
+function PotentialTokenTable({ items, onPromote }) {
   return (
     <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
       <CardHeader>
@@ -426,13 +470,43 @@ function PotentialTokenTable({ items }) {
                     {item.confidence}
                   </Badge>
                 </div>
+
                 <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-2 mt-4 text-sm">
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Price</span><span className="text-slate-50">{item.price}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">FDV</span><span className="text-slate-50">{item.fdv}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Liquidity</span><span className="text-slate-50">{item.liquidity}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">24H Volume</span><span className="text-slate-50">{item.volume24h}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Stage</span><span className="text-slate-50">{item.listingStage}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Tradability</span><span className="text-slate-50">{item.exchange}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Price</span>
+                    <span className="text-slate-50">{item.price}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">FDV</span>
+                    <span className="text-slate-50">{item.fdv}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Liquidity</span>
+                    <span className="text-slate-50">{item.liquidity}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">24H Volume</span>
+                    <span className="text-slate-50">{item.volume24h}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Stage</span>
+                    <span className="text-slate-50">{item.listingStage}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Tradability</span>
+                    <span className="text-slate-50">{item.exchange}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
+                    onClick={() => onPromote?.(item)}
+                  >
+                    <Rocket className="w-4 h-4 mr-2" />
+                    Mark as manual watch
+                  </Button>
                 </div>
               </div>
             ))
@@ -476,12 +550,26 @@ function PresaleWatchlist({ items }) {
                     {item.action}
                   </Badge>
                 </div>
+
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-2 mt-4 text-sm">
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Trust Score</span><span className="text-slate-50">{item.trustScore}/100</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Tokenomics</span><span className="text-slate-50">{item.tokenomicsScore}/100</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Vesting</span><span className="text-slate-50">{item.vesting}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800"><span className="text-slate-400 block text-xs">Audit</span><span className="text-slate-50">{item.audit}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Trust Score</span>
+                    <span className="text-slate-50">{item.trustScore}/100</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Tokenomics</span>
+                    <span className="text-slate-50">{item.tokenomicsScore}/100</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Vesting</span>
+                    <span className="text-slate-50">{item.vesting}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
+                    <span className="text-slate-400 block text-xs">Audit</span>
+                    <span className="text-slate-50">{item.audit}</span>
+                  </div>
                 </div>
+
                 <div className="mt-3 text-sm text-slate-400">
                   Red flags: <span className="text-slate-200">{item.redFlags}</span>
                 </div>
@@ -489,6 +577,135 @@ function PresaleWatchlist({ items }) {
             ))
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SniperPicks({ items, onOpen }) {
+  return (
+    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-slate-100 flex items-center gap-2">
+          <Rocket className="w-5 h-5 text-emerald-400" />
+          Top Sniper Picks
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Best current names combining score, impact, and practical opportunity.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <div className="text-slate-400">No sniper candidates right now.</div>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-4">
+            {items.map((item, idx) => (
+              <button
+                key={`${item.token}-${idx}`}
+                onClick={() => onOpen(item)}
+                className="text-left rounded-3xl border border-slate-800 bg-slate-900/70 p-5 hover:bg-slate-900 transition"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-slate-50 text-xl font-semibold">{item.token}</div>
+                  <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                    #{idx + 1}
+                  </Badge>
+                </div>
+                <div className="text-slate-400 text-sm mt-1">{item.pair}</div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                    <div className="text-slate-400 text-xs">Score</div>
+                    <div className={`mt-1 text-2xl font-semibold ${scoreColor(item.score)}`}>{item.score}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                    <div className="text-slate-400 text-xs">Impact</div>
+                    <div className="mt-1 text-2xl font-semibold text-slate-50">{item.impactPct}%</div>
+                  </div>
+                </div>
+                <div className="mt-4 text-sm text-slate-300 leading-6">{item.why}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MajorsMonitor({ items, onOpen }) {
+  return (
+    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-slate-100 flex items-center gap-2">
+          <LineChart className="w-5 h-5 text-cyan-400" />
+          Tradeable Majors
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Higher-liquidity names to monitor for cleaner execution and market tone.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <div className="text-slate-400">No major assets flagged right now.</div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item) => (
+              <button
+                key={`${item.token}-major`}
+                onClick={() => onOpen(item)}
+                className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:bg-slate-900 transition"
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="text-slate-50 font-medium">
+                      {item.token} <span className="text-slate-500 font-normal">· {item.pair}</span>
+                    </div>
+                    <div className="text-slate-400 text-sm mt-1">{item.direction}</div>
+                  </div>
+                  <Badge className={actionBadge(item.actionShort || item.action)}>{item.actionShort || item.action}</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Score <span className="text-slate-50 ml-1">{item.score}</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Impact <span className="text-slate-50 ml-1">{item.impactPct}%</span></div>
+                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">USD <span className="text-slate-50 ml-1">{fmtUsd(item.tradeUsd)}</span></div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RejectReasonsPanel({ rejectReasons = {} }) {
+  const entries = Object.entries(rejectReasons || {}).filter(([, v]) => Number(v) > 0);
+
+  return (
+    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-slate-100 flex items-center gap-2">
+          <ShieldAlert className="w-5 h-5 text-rose-400" />
+          Reject Reasons
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Why the engine filtered names out before showing them.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {entries.length === 0 ? (
+          <div className="text-slate-400">No reject data available.</div>
+        ) : (
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {entries.map(([label, value]) => (
+              <RejectReasonCard
+                key={label}
+                label={label.replaceAll("_", " ")}
+                value={value}
+              />
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -504,6 +721,7 @@ export default function SnitchDashboardApp() {
   const [fetchState, setFetchState] = useState("idle");
   const [fetchMessage, setFetchMessage] = useState("Using starter data");
   const [showSourceTools, setShowSourceTools] = useState(false);
+  const [manualWatch, setManualWatch] = useState([]);
   const fileRef = useRef(null);
 
   const loadParsedData = (parsed, sourceLabel = "Loaded data") => {
@@ -564,6 +782,7 @@ export default function SnitchDashboardApp() {
       ...(data.emergingPotential || []),
       ...(data.cautionAvoid || []),
     ];
+
     return merged.filter((x) => {
       const scoreOk = Number(x.score || 0) >= Number(minScore || 0);
       const text = `${x.token} ${x.pair} ${x.direction} ${x.action}`.toLowerCase();
@@ -571,6 +790,24 @@ export default function SnitchDashboardApp() {
       return scoreOk && searchOk;
     });
   }, [data, search, minScore]);
+
+  const majorsList = useMemo(() => {
+    return [...allCards]
+      .filter((x) => x.isMajor)
+      .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+      .slice(0, 8);
+  }, [allCards]);
+
+  const sniperPicks = useMemo(() => {
+    return [...allCards]
+      .filter((x) => !x.isMajor && Number(x.score || 0) >= 8.5 && Number(x.impactPct || 0) >= 1)
+      .sort((a, b) => {
+        const aRank = Number(a.score || 0) * 1000 + Number(a.impactPct || 0) * 100 + Math.log10(Math.max(1, Number(a.tradeUsd || 1)));
+        const bRank = Number(b.score || 0) * 1000 + Number(b.impactPct || 0) * 100 + Math.log10(Math.max(1, Number(b.tradeUsd || 1)));
+        return bRank - aRank;
+      })
+      .slice(0, 4);
+  }, [allCards]);
 
   const perfBars = data.performance.scoreTrend || [];
   const pieData = data.performance.actionMix || [];
@@ -582,6 +819,13 @@ export default function SnitchDashboardApp() {
     const parsed = JSON.parse(text);
     loadParsedData(parsed, `Loaded file: ${file.name}`);
     setFetchState("ok");
+  };
+
+  const promotePotentialToken = (token) => {
+    setManualWatch((prev) => {
+      if (prev.find((x) => x.token === token.token)) return prev;
+      return [token, ...prev].slice(0, 6);
+    });
   };
 
   return (
@@ -600,6 +844,7 @@ export default function SnitchDashboardApp() {
                 </div>
               </div>
             </div>
+
             <div className="flex flex-wrap gap-2 items-center">
               <Badge className="rounded-xl bg-slate-900/80 border border-slate-700 text-slate-200">
                 <Clock3 className="w-3.5 h-3.5 mr-1" />
@@ -732,6 +977,7 @@ export default function SnitchDashboardApp() {
                   <SelectItem value="4">Min score 4</SelectItem>
                   <SelectItem value="5">Min score 5</SelectItem>
                   <SelectItem value="6">Min score 6</SelectItem>
+                  <SelectItem value="7">Min score 7</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>
@@ -743,6 +989,44 @@ export default function SnitchDashboardApp() {
               Focus means highest-priority setups to inspect now. Emerging means promising but not fully confirmed. Caution means avoid new exposure or reduce risk.
             </CardContent>
           </Card>
+        </div>
+
+        <div className="grid gap-6 mb-6">
+          <SniperPicks items={sniperPicks} onOpen={setSelected} />
+        </div>
+
+        {manualWatch.length > 0 && (
+          <div className="grid gap-6 mb-6">
+            <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
+              <CardHeader>
+                <CardTitle className="text-slate-100 flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-amber-300" />
+                  Manual Watchlist
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Potential tokens you manually promoted for closer monitoring.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {manualWatch.map((item) => (
+                    <div key={item.token} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-slate-50 font-semibold">{item.token}</div>
+                        <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/30">{item.confidence}</Badge>
+                      </div>
+                      <div className="text-slate-400 text-sm mt-2">{item.thesis}</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="grid lg:grid-cols-[1fr_1fr] gap-6 mb-6">
+          <MajorsMonitor items={majorsList} onOpen={setSelected} />
+          <RejectReasonsPanel rejectReasons={funnel.rejectReasons || {}} />
         </div>
 
         <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6 mb-6">
@@ -891,18 +1175,27 @@ export default function SnitchDashboardApp() {
                 <div className="text-slate-100 font-medium mb-2">Trade with more confidence</div>
                 <div className="text-slate-400">Listed or watchable on major venues, enough liquidity, and better execution conditions.</div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {[...data.tradeFocusNow, ...data.emergingPotential].filter((x) => x.binanceTradable).map((x) => (
-                    <Badge key={x.token} className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">{x.token}</Badge>
-                  ))}
+                  {[...data.tradeFocusNow, ...data.emergingPotential]
+                    .filter((x) => x.binanceTradable)
+                    .map((x) => (
+                      <Badge key={x.token} className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                        {x.token}
+                      </Badge>
+                    ))}
                 </div>
               </div>
+
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                 <div className="text-slate-100 font-medium mb-2">Watch but size carefully</div>
                 <div className="text-slate-400">Potential exists, but venue/liquidity/risk means smaller size or slower confirmation.</div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {[...data.emergingPotential, ...data.cautionAvoid].filter((x) => !x.binanceTradable).map((x) => (
-                    <Badge key={x.token} className="bg-amber-500/15 text-amber-300 border-amber-500/30">{x.token}</Badge>
-                  ))}
+                  {[...data.emergingPotential, ...data.cautionAvoid]
+                    .filter((x) => !x.binanceTradable)
+                    .map((x) => (
+                      <Badge key={x.token} className="bg-amber-500/15 text-amber-300 border-amber-500/30">
+                        {x.token}
+                      </Badge>
+                    ))}
                 </div>
               </div>
             </CardContent>
@@ -910,7 +1203,7 @@ export default function SnitchDashboardApp() {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
-          <PotentialTokenTable items={data.potentialTokens || []} />
+          <PotentialTokenTable items={data.potentialTokens || []} onPromote={promotePotentialToken} />
           <PresaleWatchlist items={data.presaleWatchlist || []} />
         </div>
       </div>
