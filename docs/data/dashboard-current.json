@@ -3,7 +3,7 @@
     "product": "SNITCH Alert Dashboard",
     "mode": "Live Monitor",
     "marketBias": "Neutral",
-    "asOf": "Collector failed: 2026-04-24 06:27 UTC",
+    "asOf": "Collector failed: 2026-04-24 08:34 UTC",
     "dataSource": "collector error: 451 Client Error:  for url: https://api.binance.com/api/v3/exchangeInfo?permissions=SPOT"
   },
   "metrics": {
