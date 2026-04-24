@@ -3,8 +3,8 @@
     "product": "SNITCH Alert Dashboard",
     "mode": "Live Monitor",
     "marketBias": "Neutral",
-    "asOf": "Bootstrapped",
-    "dataSource": "seed"
+    "asOf": "Collector failed: 2026-04-24 06:27 UTC",
+    "dataSource": "collector error: 451 Client Error:  for url: https://api.binance.com/api/v3/exchangeInfo?permissions=SPOT"
   },
   "metrics": {
     "qualifiedSignals": 0,
@@ -24,11 +24,50 @@
   "emergingPotential": [],
   "cautionAvoid": [],
   "potentialTokens": [],
-  "presaleWatchlist": [],
+  "presaleWatchlist": [
+    {
+      "project": "Kite Protocol",
+      "stage": "Upcoming launchpad",
+      "launchDate": "2026-05-30",
+      "trustScore": 100,
+      "tokenomicsScore": 100,
+      "vesting": "Clear",
+      "audit": "Published",
+      "redFlags": "Competitive sector",
+      "action": "Watch"
+    },
+    {
+      "project": "HelioChain",
+      "stage": "Private round ending",
+      "launchDate": "2026-05-20",
+      "trustScore": 80,
+      "tokenomicsScore": 100,
+      "vesting": "Clear",
+      "audit": "Not published",
+      "redFlags": "No major red flag",
+      "action": "Watch"
+    },
+    {
+      "project": "VaultNet",
+      "stage": "Community presale",
+      "launchDate": "2026-06-03",
+      "trustScore": 20,
+      "tokenomicsScore": 70,
+      "vesting": "Unclear",
+      "audit": "Not published",
+      "redFlags": "Docs incomplete",
+      "action": "High caution"
+    }
+  ],
   "recentSignals": [],
   "performance": {
     "scoreTrend": [],
     "actionMix": [],
-    "proof": []
+    "proof": [
+      {
+        "metric": "Collector Error",
+        "value": "451 Client Error:  for url: https://api.binance.com/api/v3/exchangeInfo?permissions=SPOT"
+      }
+    ]
   }
 }
