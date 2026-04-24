@@ -17,6 +17,32 @@ CG_API_KEY = os.getenv("COINGECKO_API_KEY", "").strip()
 REQUEST_TIMEOUT = 30
 PREFERRED_QUOTES = {"USDT", "FDUSD", "USDC", "BTC", "ETH"}
 
+# Hard blacklist for stable / pseudo-stable / USD-pegged style names
+STABLE_SYMBOLS = {
+    "USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "PYUSD", "RLUSD",
+    "USD1", "USDQ", "USDR", "USDON", "USDL", "USDP", "GUSD", "FRAX", "SUSDS",
+    "USDS", "EURC", "LUSD", "CRVUSD", "MIM", "USDD", "XAUT", "PAXG"
+}
+STABLE_NAME_HINTS = {
+    "usd", "dollar", "stable", "euro", "tether", "trueusd", "frax", "pax dollar"
+}
+
+# High-liquidity majors we allow in main trade monitoring
+MAJOR_SYMBOLS = {
+    "BTC", "ETH", "XRP", "BNB", "SOL", "DOGE", "TRX", "AAVE",
+    "ADA", "LINK", "AVAX", "SUI", "TON", "BCH", "LTC"
+}
+
+# Exclude these from "cheap opportunities" / "potential token" tables even if active
+EXCLUDED_FROM_POTENTIAL = STABLE_SYMBOLS | MAJOR_SYMBOLS | {
+    "WBTC", "WETH", "STETH", "WSTETH", "CBBTC", "BNSOL", "MSOL", "WEETH"
+}
+
+# Exclude obvious wrappers / stake derivatives from sniper-style discovery
+WRAPPED_NAME_HINTS = {
+    "wrapped", "liquid staking", "staked ether", "restaked", "bridged"
+}
+
 
 def now_utc_text():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -116,6 +142,32 @@ def fetch_binance_spot_map():
         return {}, str(e)
 
 
+def is_stable_like(symbol, name):
+    sym = (symbol or "").upper()
+    low_name = (name or "").lower()
+
+    if sym in STABLE_SYMBOLS:
+        return True
+
+    if sym.startswith("USD") or sym.endswith("USD"):
+        return True
+
+    if sym.startswith("USD") or sym.startswith("EUR"):
+        return True
+
+    return any(hint in low_name for hint in STABLE_NAME_HINTS)
+
+
+def is_wrapped_or_derivative(symbol, name):
+    sym = (symbol or "").upper()
+    low_name = (name or "").lower()
+
+    if sym in {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "MSOL", "BNSOL", "CBBTC"}:
+        return True
+
+    return any(hint in low_name for hint in WRAPPED_NAME_HINTS)
+
+
 def tradability_bucket(binance_pairs):
     if not binance_pairs:
         return False, "Unknown / not verified on Binance"
@@ -133,19 +185,31 @@ def score_row(row, tradable):
     fdv = safe_float(row.get("fully_diluted_valuation"), 0.0) or market_cap
     price = safe_float(row.get("current_price"), 0.0)
 
-    volume_score = clamp(math.log10(max(volume, 1)) - 4.0, 0, 4)
-    rank_score = clamp((250 - min(rank, 250)) / 50, 0, 4)
-    trend_score = clamp((price_change_24h + 10) / 5, 0, 4)
-    tradability_score = 2.0 if tradable else 0.5
+    volume_score = clamp(math.log10(max(volume, 1)) - 4.2, 0, 3.5)
+    rank_score = clamp((220 - min(rank, 220)) / 55, 0, 2.5)
+    trend_score = clamp((price_change_24h + 8) / 4, 0, 2.5)
+    tradability_score = 1.8 if tradable else 0.4
     cheapness_bonus = 0.0
 
-    if price < 1:
-        cheapness_bonus += 0.5
-    if fdv > 0 and fdv < 75_000_000:
+    if price < 5:
+        cheapness_bonus += 0.3
+    if 0 < fdv < 100_000_000:
         cheapness_bonus += 0.8
+    elif 100_000_000 <= fdv < 500_000_000:
+        cheapness_bonus += 0.3
 
     final = volume_score + rank_score + trend_score + tradability_score + cheapness_bonus
     return round(clamp(final, 0, 10), 2)
+
+
+def derive_risk(symbol, tradable, market_cap, fdv, score, is_major):
+    if is_major and tradable and market_cap >= 1_000_000_000:
+        return "Low"
+    if tradable and market_cap >= 250_000_000 and score >= 6:
+        return "Medium"
+    if tradable and fdv >= 50_000_000:
+        return "Medium"
+    return "High"
 
 
 def build_signal_item(row, binance_pairs):
@@ -160,11 +224,12 @@ def build_signal_item(row, binance_pairs):
 
     score = score_row(row, tradable)
     direction = "Buy Pressure" if safe_float(row.get("price_change_percentage_24h")) >= 0 else "Sell Pressure"
+    is_major = symbol in MAJOR_SYMBOLS
+    risk = derive_risk(symbol, tradable, market_cap, fdv, score, is_major)
 
     if direction == "Buy Pressure" and score >= 7:
         action_short = "WAIT FOR CONFIRMATION"
         action = "Prepare Entry"
-        risk = "Medium" if tradable else "High"
         why = "Strong relative activity with acceptable market context."
         next_step = "Open chart and wait for confirmation or a clean retest."
         do_not = "Do not chase a vertical move."
@@ -172,7 +237,6 @@ def build_signal_item(row, binance_pairs):
     elif direction == "Buy Pressure":
         action_short = "WATCH"
         action = "Keep On Watch"
-        risk = "Medium" if tradable else "High"
         why = "Early momentum exists, but setup still needs better confirmation."
         next_step = "Watch next 15–30 minutes and wait for follow-through."
         do_not = "Do not size too big too early."
@@ -180,11 +244,15 @@ def build_signal_item(row, binance_pairs):
     else:
         action_short = "REDUCE RISK"
         action = "Reduce Risk"
-        risk = "High"
         why = "Negative price pressure or weaker structure makes fresh long exposure less attractive."
         next_step = "Avoid fresh entry and reduce bullish bias."
         do_not = "Do not catch a falling move blindly."
         cancel_if = "Cancel caution only if structure improves."
+
+    if is_major and direction == "Buy Pressure":
+        why = "Large-cap name with strong activity. Better for execution confidence than explosive upside."
+    elif is_major and direction == "Sell Pressure":
+        why = "Large-cap name under pressure. Useful as market risk signal more than hidden opportunity."
 
     return {
         "token": symbol,
@@ -192,7 +260,7 @@ def build_signal_item(row, binance_pairs):
         "pair": f"{symbol}/USD",
         "action": action,
         "actionShort": action_short,
-        "confidence": "Medium" if tradable else "Low",
+        "confidence": "High" if risk == "Low" else ("Medium" if risk == "Medium" else "Low"),
         "score": score,
         "direction": direction,
         "impactPct": round(impact_pct, 2),
@@ -211,53 +279,128 @@ def build_signal_item(row, binance_pairs):
         "volume24h": volume,
         "marketCapRank": safe_int(row.get("market_cap_rank"), 999999),
         "binancePairs": binance_pairs,
+        "isMajor": is_major,
     }
+
+
+def classify_rejection(item):
+    symbol = item["token"]
+    name = item["name"]
+    trade_usd = safe_float(item["tradeUsd"])
+    market_cap = safe_float(item["marketCap"])
+    fdv = safe_float(item["fdv"])
+    score = safe_float(item["score"])
+    rank = safe_int(item["marketCapRank"], 999999)
+    is_major = bool(item.get("isMajor"))
+
+    if is_stable_like(symbol, name):
+        return "stablecoin"
+    if is_wrapped_or_derivative(symbol, name):
+        return "wrapped_or_derivative"
+    if trade_usd < 500_000:
+        return "too_illiquid"
+    if score < 4.8:
+        return "weak_momentum"
+    if is_major and rank <= 5 and market_cap >= 10_000_000_000 and score < 7:
+        return "major_not_actionable"
+    if 0 < fdv > 5_000_000_000 and not is_major and score < 7:
+        return "too_large_for_sniper"
+    return None
 
 
 def select_focus_emerging_caution(items):
     qualified = []
     rejected = 0
+    reject_reasons = {
+        "stablecoin": 0,
+        "wrapped_or_derivative": 0,
+        "too_illiquid": 0,
+        "weak_momentum": 0,
+        "major_not_actionable": 0,
+        "too_large_for_sniper": 0,
+    }
 
     for item in items:
-        if item["tradeUsd"] < 500_000:
+        reason = classify_rejection(item)
+        if reason:
             rejected += 1
-            continue
-        if item["score"] < 4.8:
-            rejected += 1
+            reject_reasons[reason] = reject_reasons.get(reason, 0) + 1
             continue
         qualified.append(item)
 
-    focus = [x for x in qualified if x["direction"] == "Buy Pressure" and x["score"] >= 7.0]
-    emerging = [x for x in qualified if x["direction"] == "Buy Pressure" and 4.8 <= x["score"] < 7.0]
+    focus = [
+        x for x in qualified
+        if x["direction"] == "Buy Pressure" and x["score"] >= 7.0
+    ]
+    emerging = [
+        x for x in qualified
+        if x["direction"] == "Buy Pressure" and 4.8 <= x["score"] < 7.0
+    ]
     caution = [x for x in qualified if x["direction"] == "Sell Pressure"]
 
-    focus = sorted(focus, key=lambda x: (x["score"], x["tradeUsd"]), reverse=True)[:6]
-    emerging = sorted(emerging, key=lambda x: (x["score"], x["tradeUsd"]), reverse=True)[:8]
-    caution = sorted(caution, key=lambda x: (x["score"], x["tradeUsd"]), reverse=True)[:8]
+    # Prefer better tradability + non-stable + useful names
+    focus = sorted(
+        focus,
+        key=lambda x: (x["score"], x["binanceTradable"], x["tradeUsd"]),
+        reverse=True
+    )[:6]
+    emerging = sorted(
+        emerging,
+        key=lambda x: (x["score"], x["binanceTradable"], x["tradeUsd"]),
+        reverse=True
+    )[:8]
+    caution = sorted(
+        caution,
+        key=lambda x: (x["score"], x["tradeUsd"]),
+        reverse=True
+    )[:8]
 
-    return focus, emerging, caution, rejected
+    return focus, emerging, caution, rejected, reject_reasons
 
 
 def build_potential_tokens(items):
     candidates = []
+
     for item in items:
+        symbol = item["token"]
+        name = item["name"]
         fdv = safe_float(item.get("fdv"))
         volume = safe_float(item.get("volume24h"))
         price = safe_float(item.get("currentPrice"))
+        market_cap = safe_float(item.get("marketCap"))
+        rank = safe_int(item.get("marketCapRank"), 999999)
 
+        if symbol in EXCLUDED_FROM_POTENTIAL:
+            continue
+        if is_stable_like(symbol, name):
+            continue
+        if is_wrapped_or_derivative(symbol, name):
+            continue
         if volume < 1_000_000:
             continue
-        if fdv <= 0 or fdv > 80_000_000:
+        if fdv <= 0 or fdv > 120_000_000:
+            continue
+        if market_cap <= 0 or market_cap > 120_000_000:
+            continue
+        if rank <= 20:
+            continue
+        if price > 20:
             continue
 
         confidence = "Medium" if item.get("binanceTradable") else "Low"
-        stage = "New listing / low FDV" if safe_int(item.get("marketCapRank"), 999999) > 150 else "Expansion phase"
+
+        if rank > 150:
+            stage = "New listing / low FDV"
+        elif rank > 60:
+            stage = "Expansion phase"
+        else:
+            stage = "Mid-cap watch"
 
         candidates.append({
-            "token": item["token"],
+            "token": symbol,
             "price": fmt_money(price) if price >= 1000 else f"${price:,.6g}",
             "fdv": fmt_money(fdv),
-            "liquidity": fmt_money(item.get("marketCap")),
+            "liquidity": fmt_money(market_cap),
             "volume24h": fmt_money(volume),
             "listingStage": stage,
             "exchange": item.get("exchangeText", "Unknown"),
@@ -265,7 +408,15 @@ def build_potential_tokens(items):
             "thesis": "Cheap by valuation with real volume. Review structure before entry.",
         })
 
-    return candidates[:8]
+    candidates = sorted(
+        candidates,
+        key=lambda x: (
+            x["confidence"] == "Medium",
+        ),
+        reverse=True
+    )
+
+    return candidates[:12]
 
 
 def load_presales():
@@ -302,7 +453,11 @@ def load_presales():
             "action": action,
         })
 
-    return sorted(out, key=lambda x: x["trustScore"], reverse=True)
+    return sorted(
+        out,
+        key=lambda x: (x["trustScore"], x["tokenomicsScore"]),
+        reverse=True
+    )
 
 
 def build_recent(items):
@@ -334,10 +489,10 @@ def build_score_trend(focus, emerging, caution):
     e = round(sum(x["score"] for x in emerging) / max(len(emerging), 1), 1)
     c = round(sum(x["score"] for x in caution) / max(len(caution), 1), 1)
     return [
-        {"name": "Mon", "focus": max(0, round(f - 1.0, 1)), "emerging": max(0, round(e - 0.8, 1)), "caution": max(0, round(c - 0.6, 1))},
-        {"name": "Tue", "focus": max(0, round(f - 0.7, 1)), "emerging": max(0, round(e - 0.6, 1)), "caution": max(0, round(c - 0.5, 1))},
-        {"name": "Wed", "focus": max(0, round(f - 0.5, 1)), "emerging": max(0, round(e - 0.4, 1)), "caution": max(0, round(c - 0.4, 1))},
-        {"name": "Thu", "focus": max(0, round(f - 0.3, 1)), "emerging": max(0, round(e - 0.2, 1)), "caution": max(0, round(c - 0.2, 1))},
+        {"name": "Mon", "focus": max(0, round(f - 1.1, 1)), "emerging": max(0, round(e - 0.8, 1)), "caution": max(0, round(c - 0.6, 1))},
+        {"name": "Tue", "focus": max(0, round(f - 0.7, 1)), "emerging": max(0, round(e - 0.5, 1)), "caution": max(0, round(c - 0.4, 1))},
+        {"name": "Wed", "focus": max(0, round(f - 0.4, 1)), "emerging": max(0, round(e - 0.3, 1)), "caution": max(0, round(c - 0.2, 1))},
+        {"name": "Thu", "focus": max(0, round(f - 0.2, 1)), "emerging": max(0, round(e - 0.2, 1)), "caution": max(0, round(c - 0.1, 1))},
         {"name": "Fri", "focus": max(0, round(f - 0.1, 1)), "emerging": max(0, round(e - 0.1, 1)), "caution": max(0, round(c - 0.1, 1))},
         {"name": "Sat", "focus": f, "emerging": e, "caution": c},
     ]
@@ -358,7 +513,7 @@ def main():
         pairs = binance_map.get(symbol, [])
         enriched.append(build_signal_item(row, pairs))
 
-    focus, emerging, caution, rejected = select_focus_emerging_caution(enriched)
+    focus, emerging, caution, rejected, reject_reasons = select_focus_emerging_caution(enriched)
     qualified_count = len(focus) + len(emerging) + len(caution)
 
     source_note = "CoinGecko + manual presale watchlist"
@@ -388,6 +543,7 @@ def main():
             "rejected": rejected,
             "qualified": qualified_count,
             "displayed": qualified_count,
+            "rejectReasons": reject_reasons,
         },
         "tradeFocusNow": focus,
         "emergingPotential": emerging,
@@ -410,6 +566,7 @@ def main():
     write_output(output)
     print(f"Wrote {OUT_FILE}")
     print(f"Scanned={len(enriched)} Rejected={rejected} Qualified={qualified_count}")
+    print(f"Reject reasons={json.dumps(reject_reasons)}")
     if binance_error:
         print(f"Binance fallback used: {binance_error}")
 
