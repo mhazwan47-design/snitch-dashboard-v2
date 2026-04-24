@@ -33,6 +33,11 @@ jobs:
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
         run: python collector.py
 
+      - name: Show generated dashboard JSON
+        run: |
+          echo "===== dashboard-current.json ====="
+          cat docs/data/dashboard-current.json
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
