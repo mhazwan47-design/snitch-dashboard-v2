@@ -90,28 +90,35 @@ def fetch_coingecko_markets(pages=2, per_page=250):
 
 
 def fetch_binance_spot_map():
-    r = requests.get(BINANCE_EXCHANGE_INFO, params={"permissions": "SPOT"}, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    data = r.json()
+    try:
+        r = requests.get(BINANCE_EXCHANGE_INFO, params={"permissions": "SPOT"}, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
 
-    symbol_map = {}
-    for s in data.get("symbols", []):
-        if s.get("status") != "TRADING":
-            continue
-        base = (s.get("baseAsset") or "").upper()
-        quote = (s.get("quoteAsset") or "").upper()
-        sym = s.get("symbol")
-        if not base or not quote or not sym:
-            continue
-        if quote not in PREFERRED_QUOTES:
-            continue
-        symbol_map.setdefault(base, []).append(sym)
-    return symbol_map
+        symbol_map = {}
+        for s in data.get("symbols", []):
+            if s.get("status") != "TRADING":
+                continue
+            base = (s.get("baseAsset") or "").upper()
+            quote = (s.get("quoteAsset") or "").upper()
+            sym = s.get("symbol")
+            if not base or not quote or not sym:
+                continue
+            if quote not in PREFERRED_QUOTES:
+                continue
+            symbol_map.setdefault(base, []).append(sym)
+
+        print(f"Binance spot map loaded: {len(symbol_map)} assets")
+        return symbol_map, None
+
+    except Exception as e:
+        print(f"Binance fetch failed, continuing without Binance data: {e}")
+        return {}, str(e)
 
 
 def tradability_bucket(binance_pairs):
     if not binance_pairs:
-        return False, "DEX / minor venue"
+        return False, "Unknown / not verified on Binance"
     majors = [p for p in binance_pairs if p.endswith("USDT") or p.endswith("FDUSD") or p.endswith("USDC")]
     if majors:
         return True, "Major spot venue"
@@ -158,7 +165,7 @@ def build_signal_item(row, binance_pairs):
         action_short = "WAIT FOR CONFIRMATION"
         action = "Prepare Entry"
         risk = "Medium" if tradable else "High"
-        why = "Strong relative activity with better tradability and acceptable valuation context."
+        why = "Strong relative activity with acceptable market context."
         next_step = "Open chart and wait for confirmation or a clean retest."
         do_not = "Do not chase a vertical move."
         cancel_if = "Cancel if follow-through fades."
@@ -342,102 +349,69 @@ def write_output(output):
 
 
 def main():
-    try:
-        rows = fetch_coingecko_markets()
-        binance_map = fetch_binance_spot_map()
+    rows = fetch_coingecko_markets()
+    binance_map, binance_error = fetch_binance_spot_map()
 
-        enriched = []
-        for row in rows:
-            symbol = (row.get("symbol") or "").upper()
-            pairs = binance_map.get(symbol, [])
-            enriched.append(build_signal_item(row, pairs))
+    enriched = []
+    for row in rows:
+        symbol = (row.get("symbol") or "").upper()
+        pairs = binance_map.get(symbol, [])
+        enriched.append(build_signal_item(row, pairs))
 
-        focus, emerging, caution, rejected = select_focus_emerging_caution(enriched)
-        qualified_count = len(focus) + len(emerging) + len(caution)
+    focus, emerging, caution, rejected = select_focus_emerging_caution(enriched)
+    qualified_count = len(focus) + len(emerging) + len(caution)
 
-        output = {
-            "meta": {
-                "product": "SNITCH Alert Dashboard",
-                "mode": "Live Monitor",
-                "marketBias": "Neutral",
-                "asOf": now_utc_text(),
-                "dataSource": "CoinGecko + Binance + manual presale watchlist",
-            },
-            "metrics": {
-                "qualifiedSignals": qualified_count,
-                "tradeFocus": len(focus),
-                "emerging": len(emerging),
-                "caution": len(caution),
-                "avgConfidence": 70,
-                "winRate30d": 58,
-            },
-            "marketFunnel": {
-                "scanned": len(enriched),
-                "rejected": rejected,
-                "qualified": qualified_count,
-                "displayed": qualified_count,
-            },
-            "tradeFocusNow": focus,
-            "emergingPotential": emerging,
-            "cautionAvoid": caution,
-            "potentialTokens": build_potential_tokens(enriched),
-            "presaleWatchlist": load_presales(),
-            "recentSignals": build_recent(focus + emerging + caution),
-            "performance": {
-                "scoreTrend": build_score_trend(focus, emerging, caution),
-                "actionMix": build_action_mix(focus, emerging, caution),
-                "proof": [
-                    {"metric": "Qualified Signals", "value": str(qualified_count)},
-                    {"metric": "30D Win Rate", "value": "58%"},
-                    {"metric": "Avg Confidence", "value": "70/100"},
-                    {"metric": "Risk-Off Alerts", "value": str(len(caution))},
-                ],
-            },
-        }
+    source_note = "CoinGecko + manual presale watchlist"
+    if not binance_error:
+        source_note = "CoinGecko + Binance + manual presale watchlist"
+    else:
+        source_note = f"CoinGecko + manual presale watchlist | Binance unavailable: {binance_error}"
 
-        write_output(output)
-        print(f"Wrote {OUT_FILE}")
-        print(f"Scanned={len(enriched)} Rejected={rejected} Qualified={qualified_count}")
+    output = {
+        "meta": {
+            "product": "SNITCH Alert Dashboard",
+            "mode": "Live Monitor",
+            "marketBias": "Neutral",
+            "asOf": now_utc_text(),
+            "dataSource": source_note,
+        },
+        "metrics": {
+            "qualifiedSignals": qualified_count,
+            "tradeFocus": len(focus),
+            "emerging": len(emerging),
+            "caution": len(caution),
+            "avgConfidence": 70,
+            "winRate30d": 58,
+        },
+        "marketFunnel": {
+            "scanned": len(enriched),
+            "rejected": rejected,
+            "qualified": qualified_count,
+            "displayed": qualified_count,
+        },
+        "tradeFocusNow": focus,
+        "emergingPotential": emerging,
+        "cautionAvoid": caution,
+        "potentialTokens": build_potential_tokens(enriched),
+        "presaleWatchlist": load_presales(),
+        "recentSignals": build_recent(focus + emerging + caution),
+        "performance": {
+            "scoreTrend": build_score_trend(focus, emerging, caution),
+            "actionMix": build_action_mix(focus, emerging, caution),
+            "proof": [
+                {"metric": "Qualified Signals", "value": str(qualified_count)},
+                {"metric": "30D Win Rate", "value": "58%"},
+                {"metric": "Avg Confidence", "value": "70/100"},
+                {"metric": "Risk-Off Alerts", "value": str(len(caution))},
+            ],
+        },
+    }
 
-    except Exception as e:
-        error_output = {
-            "meta": {
-                "product": "SNITCH Alert Dashboard",
-                "mode": "Live Monitor",
-                "marketBias": "Neutral",
-                "asOf": f"Collector failed: {now_utc_text()}",
-                "dataSource": f"collector error: {str(e)}",
-            },
-            "metrics": {
-                "qualifiedSignals": 0,
-                "tradeFocus": 0,
-                "emerging": 0,
-                "caution": 0,
-                "avgConfidence": 0,
-                "winRate30d": 0,
-            },
-            "marketFunnel": {
-                "scanned": 0,
-                "rejected": 0,
-                "qualified": 0,
-                "displayed": 0,
-            },
-            "tradeFocusNow": [],
-            "emergingPotential": [],
-            "cautionAvoid": [],
-            "potentialTokens": [],
-            "presaleWatchlist": load_presales(),
-            "recentSignals": [],
-            "performance": {
-                "scoreTrend": [],
-                "actionMix": [],
-                "proof": [
-                    {"metric": "Collector Error", "value": str(e)},
-                ],
-            },
-        }
-        write_output(error_output)
-        print(f"Collector failed: {e}")
+    write_output(output)
+    print(f"Wrote {OUT_FILE}")
+    print(f"Scanned={len(enriched)} Rejected={rejected} Qualified={qualified_count}")
+    if binance_error:
+        print(f"Binance fallback used: {binance_error}")
 
 
 if __name__ == "__main__":
