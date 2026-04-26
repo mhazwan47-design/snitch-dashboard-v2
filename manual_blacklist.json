@@ -1,0 +1,15 @@
+{
+  "symbols": [
+    "D",
+    "PI",
+    "TEST",
+    "NULL"
+  ],
+  "name_contains": [
+    "wrapped bitcoin",
+    "wrapped ether",
+    "liquid staking",
+    "restaked",
+    "bridged"
+  ]
+}
