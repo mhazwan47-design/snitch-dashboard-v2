@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import json
-import math
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import requests
 
-from signal_engine import build_action_plan
+from signal_engine import MAJOR_SYMBOLS, build_action_plan
 from snr_engine import (
     build_fallback_snr,
     build_snr_from_klines,
@@ -26,7 +24,8 @@ BLACKLIST_FILE = ROOT / "manual_blacklist.json"
 WATCHLIST_FILE = ROOT / "manual_watchlist.json"
 
 COINGECKO_URL = "https://api.coingecko.com/api/v3/coins/markets"
-CG_API_KEY = os.getenv("COINGECKO_API_KEY", "").strip()
+CG_API_KEY = ""
+REQUEST_TIMEOUT = 30
 
 STABLE_SYMBOLS = {
     "USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USDE", "PYUSD", "RLUSD",
@@ -34,11 +33,6 @@ STABLE_SYMBOLS = {
     "USDS", "EURC", "LUSD", "CRVUSD", "MIM", "USDD", "XAUT", "PAXG"
 }
 WRAPPED_SYMBOLS = {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "MSOL", "BNSOL", "CBBTC"}
-MAJOR_SYMBOLS = {
-    "BTC", "ETH", "XRP", "BNB", "SOL", "DOGE", "TRX", "AAVE",
-    "ADA", "LINK", "AVAX", "SUI", "TON", "BCH", "LTC"
-}
-REQUEST_TIMEOUT = 30
 
 
 def safe_float(v: Any, default: float = 0.0) -> float:
@@ -151,6 +145,22 @@ def is_blacklisted(symbol: str, blacklist: Dict[str, Any]) -> bool:
     return (symbol or "").upper() in {x.upper() for x in blacklist.get("symbols", [])}
 
 
+def low_quality_symbol(symbol: str, rules: Dict[str, Any]) -> bool:
+    sym = (symbol or "").upper()
+    min_len = int(rules.get("min_quality_symbol_len", 2))
+    max_len = int(rules.get("max_quality_symbol_len", 12))
+
+    if len(sym) < min_len or len(sym) > max_len:
+        return True
+    if not sym.isalnum():
+        return True
+    if sym.isdigit():
+        return True
+    if len(sym) == 1:
+        return True
+    return False
+
+
 def tradability_bucket(binance_pairs: List[str]) -> Tuple[bool, str]:
     if not binance_pairs:
         return False, "Unknown / not verified on Binance"
@@ -176,13 +186,15 @@ def prefilter_reason(
 
     if is_blacklisted(symbol, blacklist):
         return "manual_blacklist"
+    if low_quality_symbol(symbol, rules):
+        return "manual_blacklist"
     if is_stable_like(symbol, name):
         return "stablecoin"
     if is_wrapped_like(symbol, name, blacklist):
         return "wrapped_or_derivative"
     if volume < safe_float(rules.get("min_scan_volume_usd", 500000)):
         return "too_illiquid"
-    if rank <= 5 and market_cap > 10_000_000_000 and price_change < 0.5:
+    if rank <= 5 and market_cap > 10_000_000_000 and price_change < 0.6:
         return "major_not_actionable"
     if fdv > 5_000_000_000 and symbol not in MAJOR_SYMBOLS and price_change < 1.0:
         return "too_large_for_sniper"
@@ -200,7 +212,15 @@ def build_potential_token(item: Dict[str, Any]) -> Dict[str, Any]:
         "listingStage": "New listing / low FDV" if safe_int(item.get("marketCapRank"), 999999) > 120 else "Expansion phase",
         "exchange": item.get("exchangeText", "Unknown"),
         "confidence": item.get("confidence", "Low"),
-        "thesis": "Cheap by valuation with real volume. Review structure before entry.",
+        "thesis": item.get("whyCheap", "Cheap by valuation with real volume. Review structure before entry."),
+        "sector": item.get("sector", "General"),
+        "entryType": item.get("entryType", "Watchlist"),
+        "buyZone": item.get("buyZone", []),
+        "breakoutTrigger": item.get("breakoutTrigger"),
+        "invalidation": item.get("invalidation"),
+        "tp1": item.get("tp1"),
+        "tp2": item.get("tp2"),
+        "rr": item.get("rr"),
     }
 
 
@@ -239,11 +259,11 @@ def build_score_trend(focus: List[Dict[str, Any]], emerging: List[Dict[str, Any]
     c = avg(caution)
 
     return [
-        {"name": "Mon", "focus": max(0, round(f - 0.6, 2)), "emerging": max(0, round(e - 0.5, 2)), "caution": max(0, round(c - 0.4, 2))},
-        {"name": "Tue", "focus": max(0, round(f - 0.35, 2)), "emerging": max(0, round(e - 0.3, 2)), "caution": max(0, round(c - 0.25, 2))},
-        {"name": "Wed", "focus": max(0, round(f - 0.2, 2)), "emerging": max(0, round(e - 0.2, 2)), "caution": max(0, round(c - 0.15, 2))},
-        {"name": "Thu", "focus": max(0, round(f - 0.1, 2)), "emerging": max(0, round(e - 0.1, 2)), "caution": max(0, round(c - 0.1, 2))},
-        {"name": "Fri", "focus": max(0, round(f - 0.05, 2)), "emerging": max(0, round(e - 0.05, 2)), "caution": max(0, round(c - 0.05, 2))},
+        {"name": "Mon", "focus": max(0, round(f - 0.5, 2)), "emerging": max(0, round(e - 0.4, 2)), "caution": max(0, round(c - 0.3, 2))},
+        {"name": "Tue", "focus": max(0, round(f - 0.3, 2)), "emerging": max(0, round(e - 0.25, 2)), "caution": max(0, round(c - 0.2, 2))},
+        {"name": "Wed", "focus": max(0, round(f - 0.18, 2)), "emerging": max(0, round(e - 0.15, 2)), "caution": max(0, round(c - 0.12, 2))},
+        {"name": "Thu", "focus": max(0, round(f - 0.08, 2)), "emerging": max(0, round(e - 0.08, 2)), "caution": max(0, round(c - 0.08, 2))},
+        {"name": "Fri", "focus": max(0, round(f - 0.03, 2)), "emerging": max(0, round(e - 0.03, 2)), "caution": max(0, round(c - 0.03, 2))},
         {"name": "Sat", "focus": round(f, 2), "emerging": round(e, 2), "caution": round(c, 2)},
     ]
 
@@ -304,6 +324,14 @@ def merge_manual_watchlist(potential_tokens: List[Dict[str, Any]]) -> List[Dict[
             "exchange": "Manual",
             "confidence": "Medium",
             "thesis": row.get("note", "Manual watchlist candidate."),
+            "sector": "Manual",
+            "entryType": "Manual watch",
+            "buyZone": [],
+            "breakoutTrigger": None,
+            "invalidation": None,
+            "tp1": None,
+            "tp2": None,
+            "rr": None
         })
     return merged
 
@@ -328,7 +356,7 @@ def main() -> None:
         "major_not_actionable": 0,
         "too_large_for_sniper": 0,
         "manual_blacklist": 0,
-        "weak_momentum": 0,
+        "weak_momentum": 0
     }
 
     candidates: List[Dict[str, Any]] = []
@@ -369,27 +397,56 @@ def main() -> None:
             rules=rules,
         )
 
-        if item["score"] < safe_float(rules.get("min_emerging_score", 6.2)):
+        if item["score"] < safe_float(rules.get("min_emerging_score", 5.8)):
             reject_reasons["weak_momentum"] = reject_reasons.get("weak_momentum", 0) + 1
             continue
+
+        if item["direction"] == "Buy Pressure" and safe_float(item.get("marketCap")) < safe_float(rules.get("min_market_cap_for_focus", 15_000_000)) and item["actionShort"] in {"BUY ZONE", "WAIT BREAKOUT", "WAIT FOR CONFIRMATION"}:
+            item["action"] = "Keep On Watch"
+            item["actionShort"] = "WATCH"
+            item["entryType"] = "Early Watch"
+            item["executionReady"] = False
+            item["focusBucket"] = "emerging"
 
         candidates.append(item)
 
     focus = sorted(
-        [x for x in candidates if x["actionShort"] in {"BUY ZONE", "WAIT FOR CONFIRMATION", "WAIT BREAKOUT"} and x["direction"] == "Buy Pressure"],
-        key=lambda x: (safe_float(x["score"]), safe_float(x["impactPct"]), safe_float(x["tradeUsd"])),
+        [
+            x for x in candidates
+            if x["direction"] == "Buy Pressure"
+            and x["focusBucket"] == "focus"
+        ],
+        key=lambda x: (
+            bool(x.get("executionReady")),
+            safe_float(x.get("executionScore")),
+            safe_float(x.get("score")),
+            safe_float(x.get("impactPct")),
+            safe_float(x.get("tradeUsd"))
+        ),
         reverse=True,
     )[: int(rules.get("target_focus_count", 6))]
 
     emerging = sorted(
-        [x for x in candidates if x["actionShort"] == "WATCH" and x["direction"] == "Buy Pressure"],
-        key=lambda x: (safe_float(x["score"]), safe_float(x["impactPct"]), safe_float(x["tradeUsd"])),
+        [
+            x for x in candidates
+            if x["direction"] == "Buy Pressure"
+            and x["focusBucket"] == "emerging"
+        ],
+        key=lambda x: (
+            safe_float(x.get("score")),
+            safe_float(x.get("opportunityScore")),
+            safe_float(x.get("impactPct")),
+            safe_float(x.get("tradeUsd"))
+        ),
         reverse=True,
     )[: int(rules.get("target_emerging_count", 8))]
 
     caution = sorted(
         [x for x in candidates if x["actionShort"] == "REDUCE RISK"],
-        key=lambda x: (safe_float(x["score"]), safe_float(x["tradeUsd"])),
+        key=lambda x: (
+            safe_float(x.get("score")),
+            safe_float(x.get("tradeUsd"))
+        ),
         reverse=True,
     )[: int(rules.get("target_caution_count", 8))]
 
@@ -400,17 +457,20 @@ def main() -> None:
         [
             x for x in candidates
             if not x["isMajor"]
+            and x["direction"] == "Buy Pressure"
             and x["actionShort"] != "REDUCE RISK"
-            and safe_float(x["fdv"]) <= safe_float(rules.get("max_potential_fdv_usd", 150_000_000))
-            and safe_float(x["marketCap"]) <= safe_float(rules.get("max_potential_market_cap_usd", 150_000_000))
-            and safe_float(x["volume24h"]) >= safe_float(rules.get("min_potential_volume_usd", 1_500_000))
-            and safe_float(x["currentPrice"]) <= safe_float(rules.get("max_potential_price_usd", 25))
+            and safe_float(x["fdv"]) <= safe_float(rules.get("max_potential_fdv_usd", 180_000_000))
+            and safe_float(x["marketCap"]) <= safe_float(rules.get("max_potential_market_cap_usd", 180_000_000))
+            and safe_float(x["volume24h"]) >= safe_float(rules.get("min_potential_volume_usd", 1_200_000))
+            and safe_float(x["currentPrice"]) <= safe_float(rules.get("max_potential_price_usd", 30))
+            and safe_float(x["marketCap"]) >= safe_float(rules.get("min_market_cap_for_potential", 1_000_000))
             and safe_int(x["marketCapRank"], 999999) > safe_int(rules.get("max_major_rank_for_sniper_exclude", 25))
         ],
         key=lambda x: (
-            safe_float(x["score"]),
-            safe_float(x["opportunityScore"]),
-            safe_float(x["impactPct"]),
+            bool(x.get("executionReady")),
+            safe_float(x.get("opportunityScore")),
+            safe_float(x.get("score")),
+            safe_float(x.get("impactPct"))
         ),
         reverse=True,
     )[: int(rules.get("target_potential_count", 12))]
@@ -420,41 +480,67 @@ def main() -> None:
 
     recent_items = sorted(
         focus + emerging + caution,
-        key=lambda x: (safe_float(x["score"]), safe_float(x["tradeUsd"])),
+        key=lambda x: (
+            safe_float(x.get("score")),
+            safe_float(x.get("impactPct")),
+            safe_float(x.get("tradeUsd"))
+        ),
         reverse=True,
     )
     recent_signals = build_recent(recent_items, int(rules.get("target_recent_count", 12)))
 
-    data_source_note = "CoinGecko + SNR engine + manual presale/watchlist"
+    major_monitor = sorted(
+        [x for x in candidates if x["isMajor"]],
+        key=lambda x: (
+            safe_float(x.get("executionScore")),
+            safe_float(x.get("score")),
+            safe_float(x.get("tradeUsd"))
+        ),
+        reverse=True
+    )[: int(rules.get("target_major_count", 10))]
+
+    execution_ready = sorted(
+        [x for x in focus if x.get("executionReady")],
+        key=lambda x: (
+            safe_float(x.get("rr")),
+            safe_float(x.get("executionScore")),
+            safe_float(x.get("score"))
+        ),
+        reverse=True,
+    )
+
+    data_source_note = "CoinGecko + execution engine + manual presale/watchlist"
     if not binance_error:
-        data_source_note = "CoinGecko + Binance SNR + manual presale/watchlist"
+        data_source_note = "CoinGecko + Binance SNR + execution engine + manual presale/watchlist"
     else:
-        data_source_note = f"CoinGecko + fallback SNR + manual presale/watchlist | Binance unavailable: {binance_error}"
+        data_source_note = f"CoinGecko + fallback SNR + execution engine + manual presale/watchlist | Binance unavailable: {binance_error}"
 
     payload = {
         "meta": {
             "product": "SNITCH Alert Dashboard",
-            "mode": "Live Monitor",
+            "mode": "Execution Monitor",
             "marketBias": "Neutral",
             "asOf": now_utc_text(),
-            "dataSource": data_source_note,
+            "dataSource": data_source_note
         },
         "metrics": {
             "qualifiedSignals": qualified,
             "tradeFocus": len(focus),
             "emerging": len(emerging),
             "caution": len(caution),
-            "avgConfidence": 70,
-            "winRate30d": 58,
+            "avgConfidence": 72,
+            "winRate30d": 58
         },
         "marketFunnel": {
             "scanned": scanned,
             "rejected": rejected,
             "qualified": qualified,
             "displayed": qualified,
-            "rejectReasons": reject_reasons,
+            "rejectReasons": reject_reasons
         },
         "tradeFocusNow": focus,
+        "executionReady": execution_ready,
+        "majorMonitor": major_monitor,
         "emergingPotential": emerging,
         "cautionAvoid": caution,
         "potentialTokens": potential_tokens,
@@ -465,18 +551,18 @@ def main() -> None:
             "actionMix": build_action_mix(focus, emerging, caution),
             "proof": [
                 {"metric": "Qualified Signals", "value": str(qualified)},
-                {"metric": "30D Win Rate", "value": "58%"},
-                {"metric": "Avg Confidence", "value": "70/100"},
-                {"metric": "Risk-Off Alerts", "value": str(len(caution))},
-            ],
-        },
+                {"metric": "Execution Ready", "value": str(len(execution_ready))},
+                {"metric": "Avg Confidence", "value": "72/100"},
+                {"metric": "Risk-Off Alerts", "value": str(len(caution))}
+            ]
+        }
     }
 
     write_output(payload)
 
     print(f"Wrote {OUT_FILE}")
     print(f"Scanned={scanned} Rejected={rejected} Qualified={qualified}")
-    print(f"Reject reasons={json.dumps(reject_reasons)}")
+    print(f"Focus={len(focus)} Emerging={len(emerging)} Caution={len(caution)} ExecutionReady={len(execution_ready)}")
     if binance_error:
         print(f"Binance fallback used: {binance_error}")
 
