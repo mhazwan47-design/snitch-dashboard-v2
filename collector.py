@@ -35,6 +35,9 @@ STABLE_SYMBOLS = {
 WRAPPED_SYMBOLS = {"WBTC", "WETH", "STETH", "WSTETH", "WEETH", "MSOL", "BNSOL", "CBBTC"}
 
 
+# ----------------------------
+# helpers
+# ----------------------------
 def safe_float(v: Any, default: float = 0.0) -> float:
     try:
         if v is None:
@@ -95,6 +98,9 @@ def get_cg_headers() -> Dict[str, str]:
     }
 
 
+# ----------------------------
+# data fetch
+# ----------------------------
 def fetch_coingecko_markets(rules: Dict[str, Any]) -> List[Dict[str, Any]]:
     pages = int(rules.get("coingecko_pages", 2))
     per_page = int(rules.get("coingecko_per_page", 250))
@@ -119,6 +125,9 @@ def fetch_coingecko_markets(rules: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+# ----------------------------
+# classifications
+# ----------------------------
 def is_stable_like(symbol: str, name: str) -> bool:
     sym = (symbol or "").upper()
     low = (name or "").lower()
@@ -190,6 +199,9 @@ def is_major_symbol(symbol: str, row: Dict[str, Any]) -> bool:
     return False
 
 
+# ----------------------------
+# rule gates
+# ----------------------------
 def prefilter_reason(
     row: Dict[str, Any],
     blacklist: Dict[str, Any],
@@ -214,9 +226,11 @@ def prefilter_reason(
     if volume < safe_float(rules.get("min_scan_volume_usd", 400000)):
         return "too_illiquid"
 
+    # only reject huge majors if they are dead
     if rank <= 5 and market_cap > 10_000_000_000 and price_change < 0.35:
         return "major_not_actionable"
 
+    # sniper filter only; not global market filter
     if fdv > safe_float(rules.get("hard_reject_fdv_usd", 9_000_000_000)) and rank > 80 and price_change < 0.8:
         return "too_large_for_sniper"
 
@@ -232,13 +246,13 @@ def weak_momentum_reason(item: Dict[str, Any], rules: Dict[str, Any]) -> str | N
     trade_usd = safe_float(item.get("tradeUsd"))
     direction = item.get("direction", "")
 
-    if direction == "Sell Pressure" and score < safe_float(rules.get("min_caution_keep_score", 5.1)):
+    if direction == "Sell Pressure" and score < safe_float(rules.get("min_caution_keep_score", 5.4)):
         return "weak_momentum"
 
     if direction == "Buy Pressure":
-        if score < safe_float(rules.get("min_emerging_score", 5.0)):
+        if score < safe_float(rules.get("min_emerging_score", 5.4)):
             return "weak_momentum"
-        if impact < safe_float(rules.get("min_keep_impact_pct", 0.45)) and trade_usd < safe_float(rules.get("min_keep_trade_usd", 1_500_000)):
+        if impact < safe_float(rules.get("min_keep_impact_pct", 0.8)) and trade_usd < safe_float(rules.get("min_keep_trade_usd", 3_000_000)):
             return "weak_momentum"
 
     return None
@@ -248,19 +262,17 @@ def calc_rr_quality(item: Dict[str, Any]) -> float:
     rr = safe_float(item.get("rr"))
     if rr <= 0:
         return 0.0
-    if rr >= 2.4:
+    if rr >= 2.2:
         return 1.0
-    if rr >= 2.0:
-        return 0.9
-    if rr >= 1.7:
-        return 0.78
+    if rr >= 1.8:
+        return 0.85
     if rr >= 1.5:
-        return 0.68
+        return 0.7
     if rr >= 1.3:
         return 0.55
-    if rr >= 1.15:
-        return 0.40
-    return 0.20
+    if rr >= 1.1:
+        return 0.4
+    return 0.2
 
 
 def calc_execution_rank(item: Dict[str, Any]) -> float:
@@ -279,7 +291,7 @@ def calc_execution_rank(item: Dict[str, Any]) -> float:
     elif trade_usd >= 3_000_000:
         trade_bonus = 0.4
 
-    return round((score * 0.64) + (impact * 0.18) + (rrq * 10 * 0.12) + trade_bonus, 4)
+    return round((score * 0.65) + (impact * 0.20) + (rrq * 10 * 0.10) + trade_bonus, 4)
 
 
 def calc_sniper_rank(item: Dict[str, Any]) -> float:
@@ -291,23 +303,20 @@ def calc_sniper_rank(item: Dict[str, Any]) -> float:
 
     cheap_bonus = 0.0
     if 0 < fdv <= 20_000_000:
-        cheap_bonus = 1.8
+        cheap_bonus = 1.6
     elif fdv <= 50_000_000:
-        cheap_bonus = 1.45
+        cheap_bonus = 1.25
     elif fdv <= 100_000_000:
-        cheap_bonus = 1.0
+        cheap_bonus = 0.9
     elif fdv <= 180_000_000:
-        cheap_bonus = 0.65
+        cheap_bonus = 0.55
 
     if 0 < market_cap <= 20_000_000:
-        cheap_bonus += 0.8
+        cheap_bonus += 0.7
     elif market_cap <= 60_000_000:
-        cheap_bonus += 0.5
+        cheap_bonus += 0.45
 
-    if item.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT"}:
-        cheap_bonus += 0.35
-
-    return round((score * 0.50) + (impact * 0.24) + (rrq * 10 * 0.16) + cheap_bonus, 4)
+    return round((score * 0.55) + (impact * 0.25) + (rrq * 10 * 0.10) + cheap_bonus, 4)
 
 
 def calc_opportunity_rank(item: Dict[str, Any]) -> float:
@@ -317,6 +326,9 @@ def calc_opportunity_rank(item: Dict[str, Any]) -> float:
     return round((opp * 0.55) + (score * 0.25) + (impact * 0.20), 4)
 
 
+# ----------------------------
+# transform blocks
+# ----------------------------
 def build_potential_token(item: Dict[str, Any]) -> Dict[str, Any]:
     price = safe_float(item.get("currentPrice"))
     return {
@@ -459,6 +471,9 @@ def merge_manual_watchlist(potential_tokens: List[Dict[str, Any]]) -> List[Dict[
     return merged
 
 
+# ----------------------------
+# main
+# ----------------------------
 def main() -> None:
     rules = load_json(RULES_FILE, {})
     blacklist = load_json(BLACKLIST_FILE, {"symbols": [], "name_contains": []})
@@ -528,17 +543,23 @@ def main() -> None:
 
         candidates.append(item)
 
+    # ---------------- focus ----------------
     focus = sorted(
         [
             x
             for x in candidates
             if not x["isMajor"]
             and x["direction"] == "Buy Pressure"
-            and x.get("focusBucket") == "focus"
+            and (
+                x["focusBucket"] == "focus"
+                or (
+                    safe_float(x.get("score")) >= safe_float(rules.get("promote_to_focus_score", 6.8))
+                    and safe_float(x.get("impactPct")) >= safe_float(rules.get("promote_to_focus_impact_pct", 1.5))
+                )
+            )
         ],
         key=lambda x: (
             bool(x.get("executionReady")),
-            x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT", "WAIT FOR CONFIRMATION"},
             safe_float(x.get("executionRank")),
             safe_float(x.get("rr")),
             safe_float(x.get("score")),
@@ -548,18 +569,21 @@ def main() -> None:
         reverse=True,
     )[: int(rules.get("target_focus_count", 8))]
 
+    # promote execution ready if possible
     execution_ready = sorted(
         [
             x
             for x in focus
             if (
                 bool(x.get("executionReady"))
-                or x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT"}
+                or (
+                    safe_float(x.get("score")) >= safe_float(rules.get("soft_execution_score", 7.0))
+                    and safe_float(x.get("rr")) >= safe_float(rules.get("soft_execution_rr", 1.3))
+                    and safe_float(x.get("impactPct")) >= safe_float(rules.get("soft_execution_impact", 1.2))
+                )
             )
         ],
         key=lambda x: (
-            x.get("actionShort") == "BUY NOW",
-            x.get("actionShort") == "BUY ON RETEST",
             safe_float(x.get("rr")),
             safe_float(x.get("executionRank")),
             safe_float(x.get("score")),
@@ -567,6 +591,7 @@ def main() -> None:
         reverse=True,
     )[: int(rules.get("target_execution_ready_count", 4))]
 
+    # ---------------- emerging ----------------
     emerging = sorted(
         [
             x
@@ -574,8 +599,7 @@ def main() -> None:
             if not x["isMajor"]
             and x["direction"] == "Buy Pressure"
             and x not in focus
-            and x.get("focusBucket") == "emerging"
-            and safe_float(x.get("score")) >= safe_float(rules.get("min_emerging_score", 5.0))
+            and safe_float(x.get("score")) >= safe_float(rules.get("min_emerging_score", 5.4))
         ],
         key=lambda x: (
             safe_float(x.get("sniperRank")),
@@ -587,6 +611,7 @@ def main() -> None:
         reverse=True,
     )[: int(rules.get("target_emerging_count", 10))]
 
+    # ---------------- caution ----------------
     caution = sorted(
         [
             x
@@ -606,10 +631,10 @@ def main() -> None:
         reverse=True,
     )[: int(rules.get("target_caution_count", 8))]
 
+    # ---------------- majors ----------------
     major_monitor = sorted(
         [x for x in candidates if x["isMajor"]],
         key=lambda x: (
-            x.get("actionShort") in {"MAJOR BUY ZONE", "MAJOR BREAKOUT"},
             safe_float(x.get("executionRank")),
             safe_float(x.get("score")),
             safe_float(x.get("impactPct")),
@@ -618,27 +643,28 @@ def main() -> None:
         reverse=True,
     )[: int(rules.get("target_major_count", 12))]
 
+    # ---------------- sniper ----------------
     sniper_source = sorted(
         [
             x
             for x in candidates
             if not x["isMajor"]
             and x["direction"] == "Buy Pressure"
-            and x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT", "WAIT FOR CONFIRMATION", "EARLY MOMENTUM"}
-            and safe_float(x.get("score")) >= safe_float(rules.get("min_sniper_score", 6.1))
-            and safe_float(x.get("impactPct")) >= safe_float(rules.get("min_sniper_impact_pct", 0.9))
+            and safe_float(x.get("score")) >= safe_float(rules.get("min_sniper_score", 6.8))
+            and safe_float(x.get("impactPct")) >= safe_float(rules.get("min_sniper_impact_pct", 1.2))
             and safe_float(x.get("marketCap")) <= safe_float(rules.get("max_sniper_market_cap_usd", 250_000_000))
-            and safe_float(x.get("fdv")) <= safe_float(rules.get("max_sniper_fdv_usd", 260_000_000))
+            and safe_float(x.get("fdv")) <= safe_float(rules.get("max_sniper_fdv_usd", 250_000_000))
         ],
         key=lambda x: (
             safe_float(x.get("sniperRank")),
-            x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT"},
-            safe_float(x.get("rr")),
+            safe_float(x.get("executionRank")),
+            safe_float(x.get("score")),
             safe_float(x.get("impactPct")),
         ),
         reverse=True,
     )[: int(rules.get("target_sniper_count", 5))]
 
+    # ---------------- potential tokens ----------------
     potential_source = sorted(
         [
             x
@@ -702,7 +728,7 @@ def main() -> None:
             "tradeFocus": len(focus),
             "emerging": len(emerging),
             "caution": len(caution),
-            "avgConfidence": 76 if execution_ready else 72,
+            "avgConfidence": 74 if execution_ready else 71,
             "winRate30d": 58,
         },
         "marketFunnel": {
@@ -727,7 +753,7 @@ def main() -> None:
             "proof": [
                 {"metric": "Qualified Signals", "value": str(qualified)},
                 {"metric": "Execution Ready", "value": str(len(execution_ready))},
-                {"metric": "Avg Confidence", "value": f"{76 if execution_ready else 72}/100"},
+                {"metric": "Avg Confidence", "value": f"{74 if execution_ready else 71}/100"},
                 {"metric": "Risk-Off Alerts", "value": str(len(caution))},
             ],
         },
