@@ -13,7 +13,6 @@ import {
   ShieldAlert,
   Signal,
   Target,
-  TrendingDown,
   TrendingUp,
   Wallet,
   Zap,
@@ -126,7 +125,12 @@ function fmtPrice(value) {
   const num = toNumber(value, NaN);
   if (!Number.isFinite(num)) return "N/A";
   if (Math.abs(num) >= 1000) return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  if (Math.abs(num) >= 1) return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  if (Math.abs(num) >= 1) {
+    return num.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    });
+  }
   return num.toPrecision(5);
 }
 
@@ -145,10 +149,18 @@ function scoreTone(score) {
 
 function badgeClass(action) {
   const a = String(action || "").toUpperCase();
-  if (a.includes("BUY") || a.includes("CONFIRMATION") || a.includes("BREAKOUT")) {
+  if (
+    a.includes("BUY") ||
+    a.includes("CONFIRMATION") ||
+    a.includes("BREAKOUT")
+  ) {
     return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
   }
-  if (a.includes("WATCH") || a.includes("MOMENTUM") || a.includes("RETEST")) {
+  if (
+    a.includes("WATCH") ||
+    a.includes("MOMENTUM") ||
+    a.includes("RETEST")
+  ) {
     return "border-amber-500/40 bg-amber-500/10 text-amber-300";
   }
   if (a.includes("RISK") || a.includes("REDUCE")) {
@@ -160,24 +172,22 @@ function badgeClass(action) {
   return "border-slate-600 bg-slate-800/70 text-slate-200";
 }
 
-function riskClass(risk) {
+function riskTextClass(risk) {
+  const r = String(risk || "").toLowerCase();
+  if (r === "low") return "text-emerald-300";
+  if (r === "medium") return "text-amber-300";
+  return "text-rose-300";
+}
+
+function riskBadgeClass(risk) {
   const r = String(risk || "").toLowerCase();
   if (r === "low") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
   if (r === "medium") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
   return "border-rose-500/40 bg-rose-500/10 text-rose-300";
 }
 
-function sectionIcon(section) {
-  switch (section) {
-    case "focus":
-      return <Target className="h-5 w-5 text-emerald-300" />;
-    case "emerging":
-      return <Rocket className="h-5 w-5 text-amber-300" />;
-    case "caution":
-      return <ShieldAlert className="h-5 w-5 text-rose-300" />;
-    default:
-      return <Signal className="h-5 w-5 text-cyan-300" />;
-  }
+function GaugeIcon() {
+  return <Radar className="h-4 w-4" />;
 }
 
 function useDashboardData() {
@@ -194,8 +204,8 @@ function useDashboardData() {
       const url = `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}ts=${Date.now()}`;
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
 
+      const data = await res.json();
       const merged = {
         ...emptyDashboard,
         ...data,
@@ -233,7 +243,7 @@ function useDashboardData() {
       try {
         setDashboard(JSON.parse(cached));
       } catch {
-        // ignore broken cache
+        // ignore bad cache
       }
     }
     fetchDashboard(dataUrl);
@@ -285,6 +295,120 @@ function TinyInfo({ label, value, valueClassName = "text-slate-100" }) {
   );
 }
 
+function MiniPlan({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+      <div className="text-sm text-slate-400">{label}</div>
+      <div className="mt-2 text-xl font-medium text-slate-100">{value}</div>
+    </div>
+  );
+}
+
+function InfoBlock({ title, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+      <div className="mb-2 text-sm uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="text-lg leading-8 text-slate-100">{value}</div>
+    </div>
+  );
+}
+
+function SectionHeader({ icon, title, desc }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-3">
+        {icon}
+        <h2 className="text-4xl font-bold text-slate-50">{title}</h2>
+      </div>
+      <p className="mt-2 text-xl text-slate-400">{desc}</p>
+    </div>
+  );
+}
+
+function EmptyState({ text = "No clean setup in this section right now." }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/50 shadow-2xl">
+      <CardContent className="p-10 text-3xl text-slate-400">{text}</CardContent>
+    </Card>
+  );
+}
+
+function TokenCard({ item, onSelect, selected }) {
+  return (
+    <Card
+      onClick={() => onSelect?.(item)}
+      className={cn(
+        "cursor-pointer rounded-3xl border bg-slate-950/70 shadow-2xl transition-all duration-200",
+        selected ? "border-cyan-400/50 ring-1 ring-cyan-400/40" : "border-slate-800 hover:border-slate-700"
+      )}
+    >
+      <CardContent className="space-y-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-4xl font-bold text-slate-50">{item.token}</div>
+            <div className="mt-1 text-xl text-slate-400">{item.pair}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
+              {item.actionShort}
+            </Badge>
+            {item.entryType && (
+              <Badge className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300">
+                {item.entryType}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <TinyInfo label="Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
+          <TinyInfo label="Risk" value={item.risk} valueClassName={riskTextClass(item.risk)} />
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between text-slate-400">
+            <span>Signal Strength</span>
+            <span>{Math.round(toNumber(item.score) * 10)}/100</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300"
+              style={{ width: `${Math.max(8, Math.min(100, Math.round(toNumber(item.score) * 10)))}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="text-2xl leading-10 text-slate-200">{item.why}</div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <TinyInfo label="Trade USD" value={fmtCompactUsd(item.tradeUsd)} />
+          <TinyInfo label="Impact" value={fmtPercent(item.impactPct)} />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <MiniPlan label="Buy Zone" value={fmtZone(item.buyZone)} />
+          <MiniPlan label="Breakout" value={fmtPrice(item.breakoutTrigger)} />
+          <MiniPlan label="Invalidation" value={fmtPrice(item.invalidation)} />
+          <MiniPlan label="TP1 / TP2" value={`${fmtPrice(item.tp1)} / ${fmtPrice(item.tp2)}`} />
+          <MiniPlan label="RR" value={fmtRR(item.rr)} />
+          <MiniPlan label="Sector" value={item.sector || "General"} />
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button className="rounded-2xl bg-white text-slate-950 hover:bg-slate-100">
+            <Eye className="mr-2 h-4 w-4" />
+            Open Detail
+          </Button>
+          <Button variant="outline" className="rounded-2xl border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900">
+            <Zap className="mr-2 h-4 w-4" />
+            Set Alert
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ExecutionPlan({ item }) {
   if (!item) {
     return (
@@ -310,7 +434,7 @@ function ExecutionPlan({ item }) {
             <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
               {item.actionShort}
             </Badge>
-            <Badge className={cn("rounded-full border px-4 py-2 text-sm", riskClass(item.risk))}>
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", riskBadgeClass(item.risk))}>
               {item.risk}
             </Badge>
           </div>
@@ -402,120 +526,6 @@ function ExecutionPlan({ item }) {
   );
 }
 
-function InfoBlock({ title, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-      <div className="mb-2 text-sm uppercase tracking-wide text-slate-400">{title}</div>
-      <div className="text-lg leading-8 text-slate-100">{value}</div>
-    </div>
-  );
-}
-
-function TokenCard({ item, onSelect, selected }) {
-  return (
-    <Card
-      onClick={() => onSelect?.(item)}
-      className={cn(
-        "cursor-pointer rounded-3xl border bg-slate-950/70 shadow-2xl transition-all duration-200",
-        selected ? "border-cyan-400/50 ring-1 ring-cyan-400/40" : "border-slate-800 hover:border-slate-700"
-      )}
-    >
-      <CardContent className="space-y-4 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-4xl font-bold text-slate-50">{item.token}</div>
-            <div className="mt-1 text-xl text-slate-400">{item.pair}</div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
-              {item.actionShort}
-            </Badge>
-            {item.entryType && (
-              <Badge className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300">
-                {item.entryType}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <TinyInfo label="Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
-          <TinyInfo label="Risk" value={item.risk} valueClassName={riskClass(item.risk).includes("emerald") ? "text-emerald-300" : riskClass(item.risk).includes("amber") ? "text-amber-300" : "text-rose-300"} />
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-center justify-between text-slate-400">
-            <span>Signal Strength</span>
-            <span>{Math.round(toNumber(item.score) * 10)}/100</span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300"
-              style={{ width: `${Math.max(8, Math.min(100, Math.round(toNumber(item.score) * 10)))}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="text-2xl leading-10 text-slate-200">{item.why}</div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <TinyInfo label="Trade USD" value={fmtCompactUsd(item.tradeUsd)} />
-          <TinyInfo label="Impact" value={fmtPercent(item.impactPct)} />
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <MiniPlan label="Buy Zone" value={fmtZone(item.buyZone)} />
-          <MiniPlan label="Breakout" value={fmtPrice(item.breakoutTrigger)} />
-          <MiniPlan label="Invalidation" value={fmtPrice(item.invalidation)} />
-          <MiniPlan label="TP1 / TP2" value={`${fmtPrice(item.tp1)} / ${fmtPrice(item.tp2)}`} />
-          <MiniPlan label="RR" value={fmtRR(item.rr)} />
-          <MiniPlan label="Sector" value={item.sector || "General"} />
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button className="rounded-2xl bg-white text-slate-950 hover:bg-slate-100">
-            <Eye className="mr-2 h-4 w-4" />
-            Open Detail
-          </Button>
-          <Button variant="outline" className="rounded-2xl border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900">
-            <Zap className="mr-2 h-4 w-4" />
-            Set Alert
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MiniPlan({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-      <div className="text-sm text-slate-400">{label}</div>
-      <div className="mt-2 text-xl font-medium text-slate-100">{value}</div>
-    </div>
-  );
-}
-
-function SectionHeader({ icon, title, desc }) {
-  return (
-    <div className="mb-5">
-      <div className="flex items-center gap-3">
-        {icon}
-        <h2 className="text-4xl font-bold text-slate-50">{title}</h2>
-      </div>
-      <p className="mt-2 text-xl text-slate-400">{desc}</p>
-    </div>
-  );
-}
-
-function EmptyState({ text = "No clean setup in this section right now." }) {
-  return (
-    <Card className="rounded-3xl border-slate-800 bg-slate-950/50 shadow-2xl">
-      <CardContent className="p-10 text-3xl text-slate-400">{text}</CardContent>
-    </Card>
-  );
-}
-
 function RejectReasonsCard({ reasons }) {
   const entries = Object.entries(reasons || {})
     .map(([name, value]) => ({ name, value: toNumber(value) }))
@@ -565,7 +575,7 @@ function PotentialTokenTable({ items, onQuickSelect }) {
           items.map((item) => (
             <div
               key={item.token}
-              className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5 cursor-pointer hover:border-slate-700"
+              className="cursor-pointer rounded-3xl border border-slate-800 bg-slate-900/50 p-5 hover:border-slate-700"
               onClick={() => onQuickSelect?.(item.token)}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -642,6 +652,149 @@ function PresaleTable({ items }) {
   );
 }
 
+function RecentSignalsCard({ items }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-4xl text-slate-50">Recent Qualified Signals</CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Latest filtered signals worth attention.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {items.length === 0 ? (
+          <div className="text-slate-400">No recent signals available.</div>
+        ) : (
+          items.map((item, idx) => (
+            <div key={`${item.token}-${idx}`} className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-3xl font-bold text-slate-100">{item.token}</div>
+                  <div className="mt-1 text-lg text-slate-400">{item.pair} · {item.direction}</div>
+                </div>
+                <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.action))}>
+                  {item.action}
+                </Badge>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <MiniPlan label="Score" value={fmtPlain(item.score)} />
+                <MiniPlan label="Impact" value={item.impact} />
+                <MiniPlan label="USD" value={item.usd} />
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProofCard({ items }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-4xl text-slate-50">Proof Snapshot</CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Quick performance metrics.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-2">
+        {items.length === 0 ? (
+          <div className="text-slate-400">No proof metrics available.</div>
+        ) : (
+          items.map((item) => (
+            <div key={item.metric} className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+              <div className="text-lg text-slate-400">{item.metric}</div>
+              <div className="mt-2 text-5xl font-bold text-slate-100">{item.value}</div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScoreTrendCard({ data }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-4xl text-slate-50">Performance Matrix</CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Focus, emerging, and caution trend over recent sessions.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="h-[360px] p-2">
+        {data.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-slate-400">No score trend available.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis dataKey="name" stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip
+                contentStyle={{
+                  background: "#020617",
+                  border: "1px solid #334155",
+                  borderRadius: "16px",
+                  color: "#e2e8f0",
+                }}
+              />
+              <Bar dataKey="focus" fill="#22c55e" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="emerging" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="caution" fill="#ef4444" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActionMixCard({ data }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-4xl text-slate-50">Action Mix</CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Distribution of current dashboard actions.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="h-[360px] p-2">
+        {data.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-slate-400">No action mix available.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Tooltip
+                contentStyle={{
+                  background: "#020617",
+                  border: "1px solid #334155",
+                  borderRadius: "16px",
+                  color: "#e2e8f0",
+                }}
+              />
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={80}
+                outerRadius={120}
+                paddingAngle={3}
+              >
+                {data.map((entry, idx) => (
+                  <Cell key={`${entry.name}-${idx}`} fill={["#22c55e", "#f59e0b", "#ef4444", "#38bdf8"][idx % 4]} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function App() {
   const {
     dashboard,
@@ -687,14 +840,21 @@ export default function App() {
 
   const allCards = useMemo(() => {
     const map = new Map();
-    [...tradeFocusNow, ...executionReady, ...topSniperPicks, ...majorMonitor, ...emergingPotential, ...cautionAvoid].forEach((item) => {
+    [
+      ...tradeFocusNow,
+      ...executionReady,
+      ...topSniperPicks,
+      ...majorMonitor,
+      ...emergingPotential,
+      ...cautionAvoid,
+    ].forEach((item) => {
       if (!item?.token) return;
       map.set(item.token, item);
     });
     return [...map.values()];
   }, [tradeFocusNow, executionReady, topSniperPicks, majorMonitor, emergingPotential, cautionAvoid]);
 
-  const filteredFocus = useMemo(() => {
+  const filteredList = useMemo(() => {
     const q = query.trim().toLowerCase();
     const base =
       tab === "focus"
@@ -718,8 +878,6 @@ export default function App() {
     }
     setQuery(token);
   };
-
-  const mixColors = ["#34d399", "#f59e0b", "#f87171", "#38bdf8", "#a78bfa"];
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.15),_transparent_20%),radial-gradient(circle_at_top,_rgba(6,182,212,0.12),_transparent_25%),linear-gradient(180deg,#020617_0%,#020617_100%)] text-slate-100">
@@ -751,7 +909,7 @@ export default function App() {
                     {dashboard.meta?.marketBias}
                   </Badge>
                   <Badge className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-base text-emerald-300">
-                    Live data
+                    {dashboard.meta?.mode}
                   </Badge>
                   <Badge className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-base text-emerald-300">
                     {autoRefresh ? "Auto refresh on" : "Auto refresh off"}
@@ -790,4 +948,358 @@ export default function App() {
               <CardContent className="space-y-4">
                 <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
                   <div className="text-lg font-medium text-slate-200">Current status</div>
-                  <div className="mt
+                  <div className="mt-2 text-xl text-slate-400">{fetchMessage}</div>
+                  <div className="mt-3 text-base text-slate-500">{dashboard.meta?.dataSource}</div>
+                </div>
+
+                {technicalOpen && (
+                  <>
+                    <div className="flex flex-col gap-3 xl:flex-row">
+                      <div className="flex-1">
+                        <Input
+                          value={dataUrl}
+                          onChange={(e) => setDataUrl(e.target.value)}
+                          placeholder="/snitch-dashboard-v2/data/dashboard-current.json"
+                          className="h-14 rounded-2xl border-slate-800 bg-slate-900 text-lg text-slate-100"
+                        />
+                      </div>
+                      <Button
+                        onClick={() => fetchDashboard(dataUrl)}
+                        disabled={loading}
+                        className="h-14 rounded-2xl bg-white px-6 text-lg text-slate-950 hover:bg-slate-100"
+                      >
+                        {loading ? "Connecting..." : "Connect"}
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => setAutoRefresh((s) => !s)}
+                        className="rounded-2xl border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900"
+                      >
+                        <Clock3 className="mr-2 h-4 w-4" />
+                        {autoRefresh ? "Auto Refresh On" : "Auto Refresh Off"}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        onClick={() => fetchDashboard(dataUrl)}
+                        className="rounded-2xl border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900"
+                      >
+                        <Database className="mr-2 h-4 w-4" />
+                        Load JSON
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-6 xl:grid-cols-3">
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl xl:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-300" />
+                    Execution Ready
+                  </CardTitle>
+                  <CardDescription className="text-xl text-slate-400">
+                    Cleanest active setups with usable zones and invalidation.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  {executionReady.length === 0 ? (
+                    <div className="text-slate-400">No execution-ready setup right now.</div>
+                  ) : (
+                    executionReady.map((item) => (
+                      <TokenCard
+                        key={`execution-${item.token}`}
+                        item={item}
+                        onSelect={setSelectedToken}
+                        selected={selectedToken?.token === item.token}
+                      />
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+                    <Rocket className="h-6 w-6 text-emerald-300" />
+                    Top Sniper Picks
+                  </CardTitle>
+                  <CardDescription className="text-xl text-slate-400">
+                    Best current names combining score, impact, and practical opportunity.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {topSniperPicks.length === 0 ? (
+                    <div className="text-slate-400">No sniper picks right now.</div>
+                  ) : (
+                    topSniperPicks.map((item, index) => (
+                      <div
+                        key={`sniper-${item.token}`}
+                        className="cursor-pointer rounded-3xl border border-slate-800 bg-slate-900/50 p-5 hover:border-slate-700"
+                        onClick={() => setSelectedToken(item)}
+                      >
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-4xl font-bold text-slate-50">{item.token}</div>
+                            <div className="mt-1 text-xl text-slate-400">{item.pair}</div>
+                          </div>
+                          <Badge className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
+                            #{index + 1}
+                          </Badge>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <MiniPlan label="Score" value={fmtPlain(item.score)} />
+                          <MiniPlan label="Impact" value={fmtPercent(item.impactPct)} />
+                        </div>
+
+                        <div className="mt-4 text-lg leading-8 text-slate-300">{item.why}</div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <RejectReasonsCard reasons={dashboard.marketFunnel?.rejectReasons} />
+
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+                    <LineChart className="h-6 w-6 text-cyan-300" />
+                    Tradeable Majors
+                  </CardTitle>
+                  <CardDescription className="text-xl text-slate-400">
+                    Higher-liquidity names to monitor for cleaner execution and market tone.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {majorMonitor.length === 0 ? (
+                    <div className="text-slate-400">No major monitor assets available.</div>
+                  ) : (
+                    majorMonitor.map((item) => (
+                      <div
+                        key={`major-${item.token}`}
+                        className="cursor-pointer rounded-3xl border border-slate-800 bg-slate-900/50 p-5 hover:border-slate-700"
+                        onClick={() => setSelectedToken(item)}
+                      >
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-3xl font-bold text-slate-50">{item.token} <span className="font-normal text-slate-500">· {item.pair}</span></div>
+                            <div className="mt-1 text-xl text-slate-400">{item.direction}</div>
+                          </div>
+                          <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
+                            {item.actionShort}
+                          </Badge>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <MiniPlan label="Score" value={fmtPlain(item.score)} />
+                          <MiniPlan label="Impact" value={fmtPercent(item.impactPct)} />
+                          <MiniPlan label="USD" value={fmtCompactUsd(item.tradeUsd)} />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+                    <Search className="h-6 w-6 text-slate-300" />
+                    Search & Filter
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col gap-4 xl:flex-row">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+                      <Input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search token, pair, action"
+                        className="h-14 rounded-2xl border-slate-800 bg-slate-900 pl-12 text-lg text-slate-100"
+                      />
+                    </div>
+                    <Button variant="outline" className="h-14 rounded-2xl border-slate-700 bg-transparent px-6 text-slate-100 hover:bg-slate-900">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Filter
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardContent className="p-6">
+                  <div className="text-3xl font-semibold text-slate-50">How to use this</div>
+                  <div className="mt-3 text-xl leading-9 text-slate-300">
+                    Focus means highest-priority setups to inspect now. Emerging means promising but not fully
+                    confirmed. Caution means avoid new exposure or reduce risk.
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="space-y-6">
+                <Tabs value={tab} onValueChange={setTab}>
+                  <TabsList className="grid h-16 w-full grid-cols-3 rounded-full border border-slate-800 bg-slate-950/60">
+                    <TabsTrigger value="focus" className="rounded-full text-xl data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                      Trade Focus
+                    </TabsTrigger>
+                    <TabsTrigger value="emerging" className="rounded-full text-xl data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                      Emerging
+                    </TabsTrigger>
+                    <TabsTrigger value="caution" className="rounded-full text-xl data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                      Caution
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                {tab === "focus" && (
+                  <>
+                    <SectionHeader
+                      icon={<Target className="h-5 w-5 text-emerald-300" />}
+                      title="Trade Focus Now"
+                      desc="Highest priority names to monitor immediately."
+                    />
+                    {filteredList.length === 0 ? (
+                      <EmptyState />
+                    ) : (
+                      <div className="grid gap-5 xl:grid-cols-2">
+                        {filteredList.map((item) => (
+                          <TokenCard
+                            key={`focus-${item.token}`}
+                            item={item}
+                            onSelect={setSelectedToken}
+                            selected={selectedToken?.token === item.token}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {tab === "emerging" && (
+                  <>
+                    <SectionHeader
+                      icon={<Rocket className="h-5 w-5 text-amber-300" />}
+                      title="Emerging Potential"
+                      desc="Early setups that still need confirmation."
+                    />
+                    {filteredList.length === 0 ? (
+                      <EmptyState />
+                    ) : (
+                      <div className="grid gap-5 xl:grid-cols-2">
+                        {filteredList.map((item) => (
+                          <TokenCard
+                            key={`emerging-${item.token}`}
+                            item={item}
+                            onSelect={setSelectedToken}
+                            selected={selectedToken?.token === item.token}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {tab === "caution" && (
+                  <>
+                    <SectionHeader
+                      icon={<ShieldAlert className="h-5 w-5 text-rose-300" />}
+                      title="Caution / Avoid"
+                      desc="Risky or bearish structures that need caution."
+                    />
+                    {filteredList.length === 0 ? (
+                      <EmptyState />
+                    ) : (
+                      <div className="grid gap-5 xl:grid-cols-2">
+                        {filteredList.map((item) => (
+                          <TokenCard
+                            key={`caution-${item.token}`}
+                            item={item}
+                            onSelect={setSelectedToken}
+                            selected={selectedToken?.token === item.token}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <ExecutionPlan item={selectedToken} />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <ActionMixCard data={actionMix} />
+              <ScoreTrendCard data={scoreTrend} />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <ProofCard items={proof} />
+              <RecentSignalsCard items={recentSignals} />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <PotentialTokenTable items={potentialTokens} onQuickSelect={handleQuickSelectPotential} />
+              <PresaleTable items={presaleWatchlist} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardContent className="p-5">
+                  <div className="mb-3 flex items-center gap-2 text-slate-400">
+                    <Database className="h-4 w-4" />
+                    <span className="text-sm uppercase tracking-wide">Scanned</span>
+                  </div>
+                  <div className="text-4xl font-bold text-slate-100">{dashboard.marketFunnel?.scanned ?? 0}</div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardContent className="p-5">
+                  <div className="mb-3 flex items-center gap-2 text-slate-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="text-sm uppercase tracking-wide">Rejected</span>
+                  </div>
+                  <div className="text-4xl font-bold text-rose-300">{dashboard.marketFunnel?.rejected ?? 0}</div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardContent className="p-5">
+                  <div className="mb-3 flex items-center gap-2 text-slate-400">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className="text-sm uppercase tracking-wide">Qualified</span>
+                  </div>
+                  <div className="text-4xl font-bold text-emerald-300">{dashboard.marketFunnel?.qualified ?? 0}</div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+                <CardContent className="p-5">
+                  <div className="mb-3 flex items-center gap-2 text-slate-400">
+                    <Wallet className="h-4 w-4" />
+                    <span className="text-sm uppercase tracking-wide">Displayed</span>
+                  </div>
+                  <div className="text-4xl font-bold text-amber-300">{dashboard.marketFunnel?.displayed ?? 0}</div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
