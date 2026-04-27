@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple
 MAJOR_SYMBOLS = {
     "BTC", "ETH", "XRP", "BNB", "SOL", "DOGE", "TRX", "AAVE",
     "ADA", "LINK", "AVAX", "SUI", "TON", "BCH", "LTC", "ATOM",
-    "APT", "FIL", "ALGO", "ARB", "OP", "ONDO"
+    "APT", "FIL", "ALGO", "ARB", "OP", "ONDO", "UNI", "ICP"
 }
 
 SECTOR_MAP = {
@@ -29,14 +29,13 @@ SECTOR_MAP = {
     "APT": "L1",
     "SUI": "L1",
     "ALGO": "L1",
-    "ARB": "L2",
     "STG": "Bridge",
     "GLMR": "L1",
     "PHB": "AI",
     "ORDI": "Bitcoin Ecosystem",
     "BLUR": "NFT",
     "MOVR": "L1",
-    "CORE": "L1"
+    "CORE": "L1",
 }
 
 
@@ -106,9 +105,9 @@ def opportunity_score(
     elif fdv <= 100_000_000:
         score += 2.2
     elif fdv <= 180_000_000:
-        score += 1.4
-    elif fdv <= 500_000_000:
-        score += 0.7
+        score += 1.5
+    elif fdv <= 400_000_000:
+        score += 0.8
 
     if 0 < market_cap <= 20_000_000:
         score += 2.1
@@ -116,7 +115,7 @@ def opportunity_score(
         score += 1.8
     elif market_cap <= 120_000_000:
         score += 1.2
-    elif market_cap <= 250_000_000:
+    elif market_cap <= 300_000_000:
         score += 0.6
 
     if volume >= 120_000_000:
@@ -141,7 +140,7 @@ def opportunity_score(
         score += 0.5
 
     if is_major:
-        score -= 1.6
+        score -= 1.4
 
     return round(clamp(score, 0, 10), 2)
 
@@ -156,7 +155,6 @@ def execution_score(
     resistance_zone = snr.get("resistanceZone", [0, 0])
 
     support_hi = safe_float(support_zone[-1] if support_zone else 0)
-    resistance_lo = safe_float(resistance_zone[0] if resistance_zone else 0)
     breakout = safe_float(snr.get("breakoutLevel"))
     rr = safe_float(snr.get("rr"))
     trend = snr.get("trend", "neutral")
@@ -166,27 +164,24 @@ def execution_score(
 
     dist_to_support_pct = abs(price - support_hi) / price * 100 if support_hi > 0 else 99
     dist_to_breakout_pct = abs(breakout - price) / price * 100 if breakout > 0 else 99
-    dist_to_resistance_pct = abs(resistance_lo - price) / price * 100 if resistance_lo > 0 else 99
 
     score = 0.0
 
     if trend == "bullish":
-        score += 3.1
+        score += 3.2
     elif trend == "neutral":
-        score += 1.7
+        score += 1.8
     else:
         score += 0.5
 
-    if dist_to_support_pct <= 2.2:
-        score += 2.5
+    if dist_to_support_pct <= 2.0:
+        score += 2.6
     elif dist_to_support_pct <= 4.5:
-        score += 1.8
+        score += 1.9
     elif dist_to_breakout_pct <= 1.8:
         score += 2.0
-    elif dist_to_breakout_pct <= 3.8:
+    elif dist_to_breakout_pct <= 3.5:
         score += 1.3
-    elif dist_to_resistance_pct <= 1.5:
-        score -= 0.9
 
     if rr >= 2.2:
         score += 2.4
@@ -195,7 +190,7 @@ def execution_score(
     elif rr >= 1.3:
         score += 1.0
     elif rr >= 1.0:
-        score += 0.3
+        score += 0.4
 
     if volume_ratio >= 1.6:
         score += 1.4
@@ -224,15 +219,15 @@ def risk_score(
     score = 0.0
 
     if is_major:
-        score += 1.4
+        score += 1.8
     elif market_cap >= 400_000_000:
-        score += 2.3
+        score += 2.5
     elif market_cap >= 150_000_000:
-        score += 3.2
+        score += 3.4
     elif market_cap >= 60_000_000:
-        score += 4.4
+        score += 4.5
     elif market_cap >= 20_000_000:
-        score += 5.5
+        score += 5.6
     else:
         score += 6.7
 
@@ -305,7 +300,7 @@ def build_action_plan(
     opp = opportunity_score(market_cap, fdv, volume, price, rank, is_major)
     exe = execution_score(price, snr, impact_pct, safe_float(snr.get("volumeRatio"), 1.0))
     risk_label, risk_numeric = risk_score(market_cap, volume, tradable, is_major, sector)
-    final_score = round(clamp((opp * 0.42) + (exe * 0.58), 0, 10), 2)
+    final_score = round(clamp((opp * 0.40) + (exe * 0.60), 0, 10), 2)
 
     support_zone = snr.get("supportZone", [0, 0])
     resistance_zone = snr.get("resistanceZone", [0, 0])
@@ -318,12 +313,10 @@ def build_action_plan(
 
     support_hi = safe_float(support_zone[-1] if support_zone else 0)
     support_lo = safe_float(support_zone[0] if support_zone else 0)
-    resistance_lo = safe_float(resistance_zone[0] if resistance_zone else 0)
 
-    near_support = price > 0 and support_hi > 0 and abs(price - support_hi) / price <= 0.032
-    near_breakout = price > 0 and breakout > 0 and abs(price - breakout) / price <= 0.022
+    near_support = price > 0 and support_hi > 0 and abs(price - support_hi) / price <= 0.038
+    near_breakout = price > 0 and breakout > 0 and abs(price - breakout) / price <= 0.024
     too_extended = price > 0 and support_hi > 0 and ((price - support_hi) / price * 100) > safe_float(rules.get("max_extended_distance_pct", 12))
-    clean_rr = rr >= safe_float(rules.get("buy_zone_rr_min", 1.5))
 
     action = "Keep On Watch"
     action_short = "WATCH"
@@ -336,66 +329,116 @@ def build_action_plan(
     trap_reason = ""
     focus_bucket = "emerging"
 
-    if direction == "Sell Pressure" or trend == "bearish":
-        action = "Reduce Risk"
-        action_short = "REDUCE RISK"
-        entry_type = "Avoid / Risk-off"
-        why = "Selling pressure or weak structure makes fresh long exposure less attractive."
-        next_step = f"Avoid fresh long entry unless price reclaims {fmt_price(breakout) if breakout else 'the trigger zone'}."
-        do_not = "Do not catch the dip blindly."
-        cancel_if = f"Cancel caution only if price closes back above {fmt_price(breakout) if breakout else 'the trigger level'}."
-        trap_reason = "bearish structure / sell pressure"
-        focus_bucket = "caution"
-    else:
-        if near_support and clean_rr and trend in ("bullish", "neutral"):
-            action = "Prepare Entry"
-            action_short = "BUY ZONE"
-            entry_type = "Retest Buy Zone"
-            why = "Price is near support with acceptable reward-to-risk and usable structure."
-            next_step = f"Best buy zone around {fmt_price(support_lo)} - {fmt_price(support_hi)}. Wait for support defense."
-            do_not = f"Do not hold if price loses {fmt_price(invalidation)}."
-            cancel_if = f"Cancel if price breaks below {fmt_price(invalidation)}."
-            execution_ready = True
-            focus_bucket = "focus"
-        elif near_breakout and rr >= safe_float(rules.get("wait_breakout_rr_min", 1.25)):
-            action = "Wait Breakout"
-            action_short = "WAIT BREAKOUT"
-            entry_type = "Breakout Trigger"
-            why = "Price is near breakout level and can become actionable only after confirmation."
-            next_step = f"Enter only on strong close above {fmt_price(breakout)} or breakout-retest hold."
-            do_not = "Do not pre-buy under resistance."
-            cancel_if = f"Cancel if repeated rejection happens below {fmt_price(breakout)}."
-            focus_bucket = "focus" if final_score >= safe_float(rules.get("min_focus_score", 8.0)) else "emerging"
-        elif too_extended and final_score >= safe_float(rules.get("min_focus_score", 8.0)):
-            action = "Keep On Watch"
-            action_short = "WAIT FOR RETEST"
-            entry_type = "Retest Needed"
-            why = "Momentum is strong, but price is extended from support and needs a cleaner retest."
-            next_step = f"Do not chase. Wait for pullback closer to {fmt_price(support_hi)}."
-            do_not = "Do not enter after an extended move."
-            cancel_if = f"Cancel if pullback loses {fmt_price(invalidation)}."
-            trap_reason = "extended from support"
-            focus_bucket = "focus"
-        elif final_score >= safe_float(rules.get("min_focus_score", 8.0)):
-            action = "Prepare Entry"
-            action_short = "WAIT FOR CONFIRMATION"
-            entry_type = "Confirmation Entry"
-            why = "Strong relative activity with acceptable market context."
-            next_step = f"Wait for confirmation near support {fmt_price(support_hi)} or clean move above {fmt_price(breakout)}."
-            do_not = "Do not chase a vertical move."
-            cancel_if = f"Cancel if price loses {fmt_price(invalidation)}."
-            focus_bucket = "focus"
-        elif final_score >= safe_float(rules.get("min_emerging_score", 5.8)):
-            action = "Keep On Watch"
-            action_short = "WATCH"
-            entry_type = "Early Watch"
-            why = "Early momentum exists, but setup still needs cleaner confirmation."
-            next_step = f"Watch retest near {fmt_price(support_hi)} or strength above {fmt_price(breakout)}."
-            do_not = "Do not size too big too early."
-            cancel_if = f"Cancel if price breaks below {fmt_price(invalidation)}."
-            focus_bucket = "emerging"
+    # Major logic: always meaningful, never dead board
+    if is_major:
+        if direction == "Sell Pressure":
+            action = "Reduce Risk"
+            action_short = "REDUCE RISK"
+            entry_type = "Major Risk-off"
+            why = "Major coin is under selling pressure; use it as market tone, not fresh long aggression."
+            next_step = f"Only re-engage if price reclaims {fmt_price(breakout) if breakout else 'the trigger zone'}."
+            do_not = "Do not force bullish bias against the tape."
+            cancel_if = f"Cancel caution only if price closes back above {fmt_price(breakout) if breakout else 'the trigger level'}."
+            focus_bucket = "major"
+            trap_reason = "major coin under sell pressure"
         else:
-            trap_reason = "not enough clean edge"
+            if near_support and rr >= 1.2:
+                action = "Prepare Entry"
+                action_short = "MAJOR BUY ZONE"
+                entry_type = "Major Retest Buy"
+                why = "Major coin is near support with cleaner liquidity and better execution quality."
+                next_step = f"Best buy zone around {fmt_price(support_lo)} - {fmt_price(support_hi)} with confirmation."
+                do_not = f"Do not hold if price loses {fmt_price(invalidation)}."
+                cancel_if = f"Cancel if price breaks below {fmt_price(invalidation)}."
+                execution_ready = True
+            elif near_breakout:
+                action = "Wait Breakout"
+                action_short = "MAJOR BREAKOUT"
+                entry_type = "Major Breakout Trigger"
+                why = "Major coin is near breakout level and can guide broader market tone."
+                next_step = f"Enter only on strong close above {fmt_price(breakout)}."
+                do_not = "Do not pre-buy under resistance."
+                cancel_if = f"Cancel if breakout keeps failing below {fmt_price(breakout)}."
+            elif too_extended:
+                action = "Keep On Watch"
+                action_short = "WAIT FOR RETEST"
+                entry_type = "Major Retest Needed"
+                why = "Momentum exists, but major coin is stretched away from support."
+                next_step = f"Wait for pullback closer to {fmt_price(support_hi)}."
+                do_not = "Do not chase extended majors."
+                cancel_if = f"Cancel if pullback loses {fmt_price(invalidation)}."
+                trap_reason = "extended major"
+            else:
+                action = "Keep On Watch"
+                action_short = "WATCH MAJOR"
+                entry_type = "Major Monitor"
+                why = "Useful as a cleaner liquidity monitor and market tone reference."
+                next_step = f"Watch support near {fmt_price(support_hi)} or breakout above {fmt_price(breakout)}."
+                do_not = "Do not assume majors are always best upside."
+                cancel_if = f"Cancel bullish idea if price loses {fmt_price(invalidation)}."
+            focus_bucket = "major"
+
+    else:
+        if direction == "Sell Pressure" or trend == "bearish":
+            action = "Reduce Risk"
+            action_short = "REDUCE RISK"
+            entry_type = "Avoid / Risk-off"
+            why = "Selling pressure or weak structure makes fresh long exposure less attractive."
+            next_step = f"Avoid fresh long entry unless price reclaims {fmt_price(breakout) if breakout else 'the trigger zone'}."
+            do_not = "Do not catch the dip blindly."
+            cancel_if = f"Cancel caution only if price closes back above {fmt_price(breakout) if breakout else 'the trigger level'}."
+            trap_reason = "bearish structure / sell pressure"
+            focus_bucket = "caution"
+        else:
+            if near_support and rr >= safe_float(rules.get("buy_zone_rr_min", 1.5)):
+                action = "Prepare Entry"
+                action_short = "BUY ZONE"
+                entry_type = "Retest Buy Zone"
+                why = "Price is near support with acceptable reward-to-risk and usable structure."
+                next_step = f"Best buy zone around {fmt_price(support_lo)} - {fmt_price(support_hi)}. Wait for support defense."
+                do_not = f"Do not hold if price loses {fmt_price(invalidation)}."
+                cancel_if = f"Cancel if price breaks below {fmt_price(invalidation)}."
+                execution_ready = True
+                focus_bucket = "focus"
+            elif near_breakout and rr >= safe_float(rules.get("wait_breakout_rr_min", 1.25)):
+                action = "Wait Breakout"
+                action_short = "WAIT BREAKOUT"
+                entry_type = "Breakout Trigger"
+                why = "Price is near breakout level and can become actionable after confirmation."
+                next_step = f"Enter only on strong close above {fmt_price(breakout)} or breakout-retest hold."
+                do_not = "Do not pre-buy under resistance."
+                cancel_if = f"Cancel if repeated rejection happens below {fmt_price(breakout)}."
+                focus_bucket = "focus"
+            elif too_extended and final_score >= safe_float(rules.get("min_focus_score", 8.0)) - 0.4:
+                action = "Keep On Watch"
+                action_short = "WAIT FOR RETEST"
+                entry_type = "Retest Needed"
+                why = "Momentum is strong, but price is extended from support and needs a cleaner pullback."
+                next_step = f"Do not chase. Wait for retest nearer {fmt_price(support_hi)}."
+                do_not = "Do not enter after an extended move."
+                cancel_if = f"Cancel if pullback loses {fmt_price(invalidation)}."
+                trap_reason = "extended from support"
+                focus_bucket = "focus"
+            elif final_score >= safe_float(rules.get("min_focus_score", 8.0)):
+                action = "Prepare Entry"
+                action_short = "WAIT FOR CONFIRMATION"
+                entry_type = "Confirmation Entry"
+                why = "Strong relative activity with acceptable market context."
+                next_step = f"Wait for confirmation near support {fmt_price(support_hi)} or clean move above {fmt_price(breakout)}."
+                do_not = "Do not chase a vertical move."
+                cancel_if = f"Cancel if price loses {fmt_price(invalidation)}."
+                focus_bucket = "focus"
+            elif final_score >= safe_float(rules.get("min_emerging_score", 5.8)):
+                action = "Keep On Watch"
+                action_short = "EARLY MOMENTUM"
+                entry_type = "Early Momentum"
+                why = "Momentum is building, but setup is still early and not yet clean enough for higher conviction."
+                next_step = f"Watch retest near {fmt_price(support_hi)} or breakout above {fmt_price(breakout)}."
+                do_not = "Do not size too big too early."
+                cancel_if = f"Cancel if price breaks below {fmt_price(invalidation)}."
+                focus_bucket = "emerging"
+            else:
+                trap_reason = "not enough clean edge"
 
     confidence = "High" if tradable and risk_label == "Low" else ("Medium" if tradable else "Low")
 
