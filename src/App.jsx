@@ -1,60 +1,53 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEffect, useMemo, useState } from "react";
 import {
-  AreaChart,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Eye,
+  Filter,
+  LineChart,
+  Radar,
+  Rocket,
+  Search,
+  ShieldAlert,
+  Signal,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+  Zap,
+} from "lucide-react";
+import {
   Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  CartesianGrid,
-  Legend,
 } from "recharts";
-import {
-  Search,
-  Bell,
-  Rocket,
-  TrendingUp,
-  TriangleAlert,
-  Upload,
-  RefreshCw,
-  Eye,
-  Target,
-  Filter,
-  Activity,
-  Gauge,
-  Wallet,
-  Radar,
-  Clock3,
-  Link2,
-  Database,
-  CheckCircle2,
-  AlertCircle,
-  ShieldAlert,
-  Coins,
-  LineChart,
-  Layers3,
-} from "lucide-react";
 
-const starterData = {
+import { Badge } from "./components/ui/badge";
+import { Button } from "./components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Input } from "./components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
+
+const DEFAULT_DATA_URL = "/snitch-dashboard-v2/data/dashboard-current.json";
+
+const emptyDashboard = {
   meta: {
     product: "SNITCH Alert Dashboard",
-    mode: "Live Monitor",
+    mode: "Execution Monitor",
     marketBias: "Neutral",
-    asOf: "Bootstrapped",
-    dataSource: "seed",
+    asOf: "No data",
+    dataSource: "No source",
   },
   metrics: {
     qualifiedSignals: 0,
@@ -72,6 +65,9 @@ const starterData = {
     rejectReasons: {},
   },
   tradeFocusNow: [],
+  executionReady: [],
+  majorMonitor: [],
+  topSniperPicks: [],
   emergingPotential: [],
   cautionAvoid: [],
   potentialTokens: [],
@@ -84,260 +80,216 @@ const starterData = {
   },
 };
 
-function normalizeIncomingData(raw) {
-  if (!raw || typeof raw !== "object") return starterData;
+function cn(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function toNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function fmtCompactUsd(value) {
+  const num = toNumber(value, NaN);
+  if (!Number.isFinite(num)) return "N/A";
+  if (Math.abs(num) >= 1_000_000_000) return `$${(num / 1_000_000_000).toFixed(2)}B`;
+  if (Math.abs(num) >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(num) >= 1_000) return `$${(num / 1_000).toFixed(2)}K`;
+  return `$${num.toFixed(2)}`;
+}
+
+function fmtPlain(value) {
+  const num = toNumber(value, NaN);
+  if (!Number.isFinite(num)) return "N/A";
+  if (Math.abs(num) >= 1000) return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (Math.abs(num) >= 1) return num.toFixed(4);
+  return num.toPrecision(4);
+}
+
+function fmtPercent(value) {
+  const num = toNumber(value, NaN);
+  if (!Number.isFinite(num)) return "N/A";
+  return `${num.toFixed(2)}%`;
+}
+
+function fmtRR(value) {
+  const num = toNumber(value, NaN);
+  if (!Number.isFinite(num) || num <= 0) return "N/A";
+  return `1:${num.toFixed(2)}`;
+}
+
+function fmtPrice(value) {
+  const num = toNumber(value, NaN);
+  if (!Number.isFinite(num)) return "N/A";
+  if (Math.abs(num) >= 1000) return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (Math.abs(num) >= 1) return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return num.toPrecision(5);
+}
+
+function fmtZone(zone) {
+  if (!Array.isArray(zone) || zone.length < 2) return "N/A";
+  return `${fmtPrice(zone[0])} – ${fmtPrice(zone[1])}`;
+}
+
+function scoreTone(score) {
+  const n = toNumber(score);
+  if (n >= 8.5) return "text-emerald-400";
+  if (n >= 7) return "text-teal-300";
+  if (n >= 5.8) return "text-amber-300";
+  return "text-rose-300";
+}
+
+function badgeClass(action) {
+  const a = String(action || "").toUpperCase();
+  if (a.includes("BUY") || a.includes("CONFIRMATION") || a.includes("BREAKOUT")) {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+  }
+  if (a.includes("WATCH") || a.includes("MOMENTUM") || a.includes("RETEST")) {
+    return "border-amber-500/40 bg-amber-500/10 text-amber-300";
+  }
+  if (a.includes("RISK") || a.includes("REDUCE")) {
+    return "border-rose-500/40 bg-rose-500/10 text-rose-300";
+  }
+  if (a.includes("MAJOR")) {
+    return "border-cyan-500/40 bg-cyan-500/10 text-cyan-300";
+  }
+  return "border-slate-600 bg-slate-800/70 text-slate-200";
+}
+
+function riskClass(risk) {
+  const r = String(risk || "").toLowerCase();
+  if (r === "low") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+  if (r === "medium") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
+  return "border-rose-500/40 bg-rose-500/10 text-rose-300";
+}
+
+function sectionIcon(section) {
+  switch (section) {
+    case "focus":
+      return <Target className="h-5 w-5 text-emerald-300" />;
+    case "emerging":
+      return <Rocket className="h-5 w-5 text-amber-300" />;
+    case "caution":
+      return <ShieldAlert className="h-5 w-5 text-rose-300" />;
+    default:
+      return <Signal className="h-5 w-5 text-cyan-300" />;
+  }
+}
+
+function useDashboardData() {
+  const [dashboard, setDashboard] = useState(emptyDashboard);
+  const [dataUrl, setDataUrl] = useState(localStorage.getItem("snitch-dashboard-url") || DEFAULT_DATA_URL);
+  const [loading, setLoading] = useState(false);
+  const [fetchMessage, setFetchMessage] = useState("Using live dashboard source");
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [technicalOpen, setTechnicalOpen] = useState(false);
+
+  const fetchDashboard = async (targetUrl = dataUrl) => {
+    setLoading(true);
+    try {
+      const url = `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}ts=${Date.now()}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const merged = {
+        ...emptyDashboard,
+        ...data,
+        meta: { ...emptyDashboard.meta, ...(data.meta || {}) },
+        metrics: { ...emptyDashboard.metrics, ...(data.metrics || {}) },
+        marketFunnel: { ...emptyDashboard.marketFunnel, ...(data.marketFunnel || {}) },
+        performance: { ...emptyDashboard.performance, ...(data.performance || {}) },
+      };
+
+      setDashboard(merged);
+      setFetchMessage(`Connected to ${targetUrl}`);
+      localStorage.setItem("snitch-dashboard-url", targetUrl);
+      localStorage.setItem("snitch-dashboard-data", JSON.stringify(merged));
+    } catch (error) {
+      const cached = localStorage.getItem("snitch-dashboard-data");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setDashboard(parsed);
+          setFetchMessage(`Live fetch failed, using cached data (${error.message})`);
+        } catch {
+          setFetchMessage(`Load failed: ${error.message}`);
+        }
+      } else {
+        setFetchMessage(`Load failed: ${error.message}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const cached = localStorage.getItem("snitch-dashboard-data");
+    if (cached) {
+      try {
+        setDashboard(JSON.parse(cached));
+      } catch {
+        // ignore broken cache
+      }
+    }
+    fetchDashboard(dataUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setInterval(() => {
+      fetchDashboard(dataUrl);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, dataUrl]);
+
   return {
-    meta: { ...starterData.meta, ...(raw.meta || {}) },
-    metrics: { ...starterData.metrics, ...(raw.metrics || {}) },
-    marketFunnel: { ...starterData.marketFunnel, ...(raw.marketFunnel || {}) },
-    tradeFocusNow: Array.isArray(raw.tradeFocusNow) ? raw.tradeFocusNow : [],
-    emergingPotential: Array.isArray(raw.emergingPotential) ? raw.emergingPotential : [],
-    cautionAvoid: Array.isArray(raw.cautionAvoid) ? raw.cautionAvoid : [],
-    potentialTokens: Array.isArray(raw.potentialTokens) ? raw.potentialTokens : [],
-    presaleWatchlist: Array.isArray(raw.presaleWatchlist) ? raw.presaleWatchlist : [],
-    recentSignals: Array.isArray(raw.recentSignals) ? raw.recentSignals : [],
-    performance: {
-      ...starterData.performance,
-      ...(raw.performance || {}),
-    },
+    dashboard,
+    dataUrl,
+    setDataUrl,
+    fetchDashboard,
+    loading,
+    fetchMessage,
+    autoRefresh,
+    setAutoRefresh,
+    technicalOpen,
+    setTechnicalOpen,
   };
 }
 
-function fmtUsd(v) {
-  if (typeof v !== "number") return v;
-  if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(2)}K`;
-  return `$${v.toFixed(2)}`;
-}
-
-function scoreColor(score) {
-  if (score >= 7) return "text-emerald-400";
-  if (score >= 5) return "text-amber-300";
-  return "text-rose-400";
-}
-
-function actionBadge(action) {
-  if (["BUY NOW", "PREPARE ENTRY", "WAIT FOR CONFIRMATION"].includes(action)) {
-    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  }
-  if (["WATCH", "KEEP ON WATCH"].includes(action)) {
-    return "bg-amber-500/15 text-amber-300 border-amber-500/30";
-  }
-  return "bg-rose-500/15 text-rose-300 border-rose-500/30";
-}
-
-function riskBadge(risk) {
-  if (risk === "High") return "bg-rose-500/15 text-rose-300 border-rose-500/30";
-  if (risk === "Medium") return "bg-amber-500/15 text-amber-300 border-amber-500/30";
-  return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-}
-
-function getDefaultDataUrl() {
-  return `${import.meta.env.BASE_URL}data/dashboard-current.json`;
-}
-
-function StatCard({ icon: Icon, label, value }) {
+function MetricCard({ label, value, icon }) {
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="flex items-center gap-2 text-slate-400 text-sm">
-        <Icon className="w-4 h-4" />
-        {label}
-      </div>
-      <div className="text-slate-50 text-2xl font-semibold mt-2">{value}</div>
-    </div>
-  );
-}
-
-function ActionLine({ title, body }) {
-  return (
-    <div>
-      <div className="text-slate-400 text-xs uppercase tracking-wide mb-1">{title}</div>
-      <div>{body}</div>
-    </div>
-  );
-}
-
-function Meter({ label, value, inverse = false }) {
-  const normalized = Math.max(0, Math.min(100, value));
-  return (
-    <div>
-      <div className="flex justify-between text-xs text-slate-400 mb-2">
-        <span>{label}</span>
-        <span>{Math.round(normalized)}</span>
-      </div>
-      <Progress value={inverse ? 100 - normalized : normalized} className="h-2 bg-slate-800" />
-    </div>
-  );
-}
-
-function MiniMetric({ icon: Icon, label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-wide">
-        <Icon className="w-4 h-4" />
-        {label}
-      </div>
-      <div className="text-slate-50 text-2xl font-semibold mt-2">{value}</div>
-    </div>
-  );
-}
-
-function StatusPill({ status, text }) {
-  const tone =
-    status === "ok"
-      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-      : status === "warn"
-      ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-      : "bg-slate-700/50 text-slate-300 border-slate-700";
-
-  return <Badge className={`rounded-xl ${tone}`}>{text}</Badge>;
-}
-
-function FunnelCard({ label, value, tone = "slate" }) {
-  const toneMap = {
-    emerald: "text-emerald-300 border-emerald-500/20 bg-emerald-500/5",
-    amber: "text-amber-300 border-amber-500/20 bg-amber-500/5",
-    rose: "text-rose-300 border-rose-500/20 bg-rose-500/5",
-    slate: "text-slate-100 border-slate-800 bg-slate-900/70",
-  };
-
-  return (
-    <div className={`rounded-2xl border p-4 ${toneMap[tone] || toneMap.slate}`}>
-      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-2 text-3xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function RejectReasonCard({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-rose-300">{value}</div>
-    </div>
-  );
-}
-
-function classifyQualityBand(item) {
-  const score = Number(item?.score || 0);
-  const impact = Number(item?.impactPct || 0);
-  const risk = item?.risk || "High";
-  const tradeUsd = Number(item?.tradeUsd || 0);
-
-  if (score >= 8.8 && impact >= 1.0 && tradeUsd >= 30_000_000) return "Sniper";
-  if (score >= 7.2 && risk !== "High") return "Balanced";
-  return "Speculative";
-}
-
-function qualityBadge(quality) {
-  if (quality === "Sniper") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  if (quality === "Balanced") return "bg-cyan-500/15 text-cyan-300 border-cyan-500/30";
-  return "bg-violet-500/15 text-violet-300 border-violet-500/30";
-}
-
-function TokenCard({ item, onOpen }) {
-  const quality = classifyQualityBand(item);
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl backdrop-blur">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <CardTitle className="text-slate-50 text-xl">{item.token}</CardTitle>
-              <CardDescription className="text-slate-400 mt-1">{item.pair}</CardDescription>
-            </div>
-            <div className="flex gap-2 flex-wrap justify-end">
-              <Badge className={qualityBadge(quality)}>{quality}</Badge>
-              <Badge className={actionBadge(item.actionShort || item.action)}>
-                {item.actionShort || item.action}
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-              <div className="text-slate-400">Score</div>
-              <div className={`text-2xl font-semibold ${scoreColor(item.score)}`}>{item.score}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-              <div className="text-slate-400">Risk</div>
-              <div className="mt-1">
-                <Badge className={riskBadge(item.risk)}>{item.risk}</Badge>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-xs text-slate-400 mb-2">
-              <span>Signal Strength</span>
-              <span>{Math.min(100, Math.round((item.score || 0) * 10))}/100</span>
-            </div>
-            <Progress value={Math.min(100, Math.round((item.score || 0) * 10))} className="h-2 bg-slate-800" />
-          </div>
-
-          <div className="text-sm text-slate-300 leading-6">{item.why}</div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm text-slate-300">
-            <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
-              <div className="text-slate-400 text-xs">Trade USD</div>
-              <div className="font-medium">{fmtUsd(item.tradeUsd)}</div>
-            </div>
-            <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-3">
-              <div className="text-slate-400 text-xs">Impact</div>
-              <div className="font-medium">{item.impactPct}%</div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={() => onOpen(item)}>
-              <Eye className="w-4 h-4 mr-2" />
-              Open Detail
-            </Button>
-            <Button variant="outline" className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900">
-              <Bell className="w-4 h-4 mr-2" />
-              Set Alert
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-function SectionGrid({ title, desc, items, onOpen }) {
-  return (
-    <div className="space-y-4">
-      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-        <CardHeader>
-          <CardTitle className="text-slate-100">{title}</CardTitle>
-          <CardDescription className="text-slate-400">{desc}</CardDescription>
-        </CardHeader>
-      </Card>
-
-      {items.length === 0 ? (
-        <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-          <CardContent className="p-8 text-slate-400">No clean setup in this section right now.</CardContent>
-        </Card>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-4">
-          {items.map((item) => (
-            <TokenCard key={`${item.token}-${item.pair}`} item={item} onOpen={onOpen} />
-          ))}
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardContent className="p-5">
+        <div className="mb-3 flex items-center gap-2 text-slate-400">
+          {icon}
+          <span className="text-sm uppercase tracking-wide">{label}</span>
         </div>
-      )}
+        <div className="text-3xl font-bold text-slate-100">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TinyInfo({ label, value, valueClassName = "text-slate-100" }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+      <div className="text-sm text-slate-400">{label}</div>
+      <div className={cn("mt-2 text-xl font-semibold", valueClassName)}>{value}</div>
     </div>
   );
 }
 
-function DetailPanel({ item }) {
+function ExecutionPlan({ item }) {
   if (!item) {
     return (
-      <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl h-full">
-        <CardContent className="p-8 text-slate-400 flex items-center justify-center h-full min-h-[420px]">
+      <Card className="h-full rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+        <CardContent className="flex h-full min-h-[320px] items-center justify-center p-8 text-center text-slate-400">
           Select a token card to view the full action plan.
         </CardContent>
       </Card>
@@ -345,90 +297,101 @@ function DetailPanel({ item }) {
   }
 
   return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl overflow-hidden">
-      <CardHeader className="border-b border-slate-800 bg-gradient-to-r from-slate-950 to-slate-900">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+    <Card className="h-full rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader className="border-b border-slate-800 pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-slate-50 text-2xl">{item.token}</CardTitle>
-            <CardDescription className="text-slate-400 mt-1">
+            <CardTitle className="text-4xl font-bold text-slate-50">{item.token}</CardTitle>
+            <CardDescription className="mt-2 text-xl text-slate-400">
               {item.pair} · {item.direction}
             </CardDescription>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Badge className={actionBadge(item.actionShort || item.action)}>
-              {item.actionShort || item.action}
+          <div className="flex flex-wrap gap-2">
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
+              {item.actionShort}
             </Badge>
-            <Badge className={riskBadge(item.risk)}>{item.risk}</Badge>
-            <Badge className={qualityBadge(classifyQualityBand(item))}>{classifyQualityBand(item)}</Badge>
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", riskClass(item.risk))}>
+              {item.risk}
+            </Badge>
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="p-6 space-y-6">
-        <div className="grid md:grid-cols-3 gap-4">
-          <StatCard icon={Gauge} label="Action Score" value={String(item.score)} />
-          <StatCard icon={Activity} label="Liquidity Impact" value={`${item.impactPct}%`} />
-          <StatCard icon={Wallet} label="Trade Value" value={fmtUsd(item.tradeUsd)} />
+      <CardContent className="space-y-5 p-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <TinyInfo label="Action Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
+          <TinyInfo label="Liquidity Impact" value={fmtPercent(item.impactPct)} />
+          <TinyInfo label="Trade Value" value={fmtCompactUsd(item.tradeUsd)} />
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
-            <CardHeader>
-              <CardTitle className="text-base text-slate-100">Next Practical Action</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-300 leading-6">
-              <ActionLine title="Action Now" body={item.action} />
-              <ActionLine title="What it means" body={item.why} />
-              <ActionLine title="What to do next" body={item.nextStep} />
-              <ActionLine title="Do not do" body={item.doNot} />
-              <ActionLine title="Cancel plan if" body={item.cancelIf} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <TinyInfo label="Trend" value={String(item.trend || "neutral").toUpperCase()} />
+          <TinyInfo label="Sector" value={item.sector || "General"} />
+          <TinyInfo label="Entry Type" value={item.entryType || "Watch"} />
+          <TinyInfo label="RR" value={fmtRR(item.rr)} />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <TinyInfo label="Buy Zone" value={fmtZone(item.buyZone)} />
+          <TinyInfo label="Breakout Trigger" value={fmtPrice(item.breakoutTrigger)} />
+          <TinyInfo label="Invalidation" value={fmtPrice(item.invalidation)} />
+          <TinyInfo label="TP1 / TP2" value={`${fmtPrice(item.tp1)} / ${fmtPrice(item.tp2)}`} />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
+            <CardContent className="space-y-4 p-5">
+              <InfoBlock title="Action Now" value={item.action} />
+              <InfoBlock title="What it means" value={item.why} />
+              <InfoBlock title="What to do next" value={item.nextStep} />
+              <InfoBlock title="Do not do" value={item.doNot} />
+              <InfoBlock title="Cancel plan if" value={item.cancelIf} />
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
-            <CardHeader>
-              <CardTitle className="text-base text-slate-100">Signal Meter</CardTitle>
-              <CardDescription className="text-slate-400">
-                Momentum and confidence snapshot
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Meter label="Setup Quality" value={Math.min(100, (item.score || 0) * 10)} />
-              <Meter
-                label="Conviction"
-                value={item.confidence === "High" ? 84 : item.confidence === "Medium" ? 66 : 38}
-              />
-              <Meter
-                label="Risk Control"
-                value={item.risk === "High" ? 35 : item.risk === "Medium" ? 62 : 84}
-                inverse
-              />
+          <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
+            <CardContent className="space-y-4 p-5">
+              <InfoBlock title="Why this is cheap" value={item.whyCheap || "N/A"} />
+              <InfoBlock title="Tradability" value={item.exchangeText || "Unknown"} />
+              <InfoBlock title="Confidence" value={item.confidence || "N/A"} />
+              <InfoBlock title="Trap reason" value={item.trapReason || "No major trap flagged"} />
             </CardContent>
           </Card>
         </div>
 
-        {item.history && Array.isArray(item.history) && item.history.length > 0 && (
-          <Card className="bg-slate-900/70 border-slate-800 rounded-3xl">
+        {safeArray(item.history).length > 0 && (
+          <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
             <CardHeader>
-              <CardTitle className="text-base text-slate-100">Recent Performance Matrix</CardTitle>
-              <CardDescription className="text-slate-400">
-                Signal score trend for this token
-              </CardDescription>
+              <CardTitle className="text-lg text-slate-100">Micro Structure Snapshot</CardTitle>
+              <CardDescription className="text-slate-400">Recent score history from the current engine.</CardDescription>
             </CardHeader>
-            <CardContent className="h-64">
+            <CardContent className="h-56 p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={item.history}>
                   <defs>
-                    <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
+                    <linearGradient id={`hist-${item.token}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#34d399" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#34d399" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="d" stroke="#94a3b8" />
                   <YAxis stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
-                  <Area type="monotone" dataKey="score" stroke="#22c55e" fill="url(#grad1)" strokeWidth={3} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "#020617",
+                      border: "1px solid #334155",
+                      borderRadius: "16px",
+                      color: "#e2e8f0",
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#34d399"
+                    fill={`url(#hist-${item.token})`}
+                    strokeWidth={2}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -439,774 +402,392 @@ function DetailPanel({ item }) {
   );
 }
 
-function PotentialTokenTable({ items, onPromote }) {
+function InfoBlock({ title, value }) {
   return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-      <CardHeader>
-        <CardTitle className="text-slate-100">Potential Tokens</CardTitle>
-        <CardDescription className="text-slate-400">
-          Broader opportunities beyond the current qualified shortlist.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {items.length === 0 ? (
-            <div className="text-slate-400">No potential tokens found right now.</div>
-          ) : (
-            items.map((item) => (
-              <div key={item.token} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div>
-                    <div className="text-slate-50 font-semibold text-lg">{item.token}</div>
-                    <div className="text-slate-400 text-sm mt-1">{item.thesis}</div>
-                  </div>
-                  <Badge
-                    className={
-                      item.confidence === "Low"
-                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
-                        : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                    }
-                  >
-                    {item.confidence}
-                  </Badge>
-                </div>
-
-                <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-2 mt-4 text-sm">
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Price</span>
-                    <span className="text-slate-50">{item.price}</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">FDV</span>
-                    <span className="text-slate-50">{item.fdv}</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Liquidity</span>
-                    <span className="text-slate-50">{item.liquidity}</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">24H Volume</span>
-                    <span className="text-slate-50">{item.volume24h}</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Stage</span>
-                    <span className="text-slate-50">{item.listingStage}</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Tradability</span>
-                    <span className="text-slate-50">{item.exchange}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
-                    onClick={() => onPromote?.(item)}
-                  >
-                    <Rocket className="w-4 h-4 mr-2" />
-                    Mark as manual watch
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PresaleWatchlist({ items }) {
-  return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-      <CardHeader>
-        <CardTitle className="text-slate-100">Presale Watchlist</CardTitle>
-        <CardDescription className="text-slate-400">
-          Not guaranteed trusted. Use this as a structured watchlist with red-flag awareness.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {items.length === 0 ? (
-            <div className="text-slate-400">No presale watchlist items right now.</div>
-          ) : (
-            items.map((item) => (
-              <div key={item.project} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div>
-                    <div className="text-slate-50 font-semibold">{item.project}</div>
-                    <div className="text-slate-400 text-sm mt-1">
-                      {item.stage} · {item.launchDate}
-                    </div>
-                  </div>
-                  <Badge
-                    className={
-                      item.action === "High caution"
-                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
-                        : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                    }
-                  >
-                    {item.action}
-                  </Badge>
-                </div>
-
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-2 mt-4 text-sm">
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Trust Score</span>
-                    <span className="text-slate-50">{item.trustScore}/100</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Tokenomics</span>
-                    <span className="text-slate-50">{item.tokenomicsScore}/100</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Vesting</span>
-                    <span className="text-slate-50">{item.vesting}</span>
-                  </div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">
-                    <span className="text-slate-400 block text-xs">Audit</span>
-                    <span className="text-slate-50">{item.audit}</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 text-sm text-slate-400">
-                  Red flags: <span className="text-slate-200">{item.redFlags}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SniperPicks({ items, onOpen }) {
-  return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-      <CardHeader>
-        <CardTitle className="text-slate-100 flex items-center gap-2">
-          <Rocket className="w-5 h-5 text-emerald-400" />
-          Top Sniper Picks
-        </CardTitle>
-        <CardDescription className="text-slate-400">
-          Best current names combining score, impact, and practical opportunity.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
-          <div className="text-slate-400">No sniper candidates right now.</div>
-        ) : (
-          <div className="grid md:grid-cols-3 gap-4">
-            {items.map((item, idx) => (
-              <button
-                key={`${item.token}-${idx}`}
-                onClick={() => onOpen(item)}
-                className="text-left rounded-3xl border border-slate-800 bg-slate-900/70 p-5 hover:bg-slate-900 transition"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-slate-50 text-xl font-semibold">{item.token}</div>
-                  <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
-                    #{idx + 1}
-                  </Badge>
-                </div>
-                <div className="text-slate-400 text-sm mt-1">{item.pair}</div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
-                    <div className="text-slate-400 text-xs">Score</div>
-                    <div className={`mt-1 text-2xl font-semibold ${scoreColor(item.score)}`}>{item.score}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
-                    <div className="text-slate-400 text-xs">Impact</div>
-                    <div className="mt-1 text-2xl font-semibold text-slate-50">{item.impactPct}%</div>
-                  </div>
-                </div>
-                <div className="mt-4 text-sm text-slate-300 leading-6">{item.why}</div>
-              </button>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function MajorsMonitor({ items, onOpen }) {
-  return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-      <CardHeader>
-        <CardTitle className="text-slate-100 flex items-center gap-2">
-          <LineChart className="w-5 h-5 text-cyan-400" />
-          Tradeable Majors
-        </CardTitle>
-        <CardDescription className="text-slate-400">
-          Higher-liquidity names to monitor for cleaner execution and market tone.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
-          <div className="text-slate-400">No major assets flagged right now.</div>
-        ) : (
-          <div className="space-y-3">
-            {items.map((item) => (
-              <button
-                key={`${item.token}-major`}
-                onClick={() => onOpen(item)}
-                className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:bg-slate-900 transition"
-              >
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div>
-                    <div className="text-slate-50 font-medium">
-                      {item.token} <span className="text-slate-500 font-normal">· {item.pair}</span>
-                    </div>
-                    <div className="text-slate-400 text-sm mt-1">{item.direction}</div>
-                  </div>
-                  <Badge className={actionBadge(item.actionShort || item.action)}>{item.actionShort || item.action}</Badge>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Score <span className="text-slate-50 ml-1">{item.score}</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Impact <span className="text-slate-50 ml-1">{item.impactPct}%</span></div>
-                  <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">USD <span className="text-slate-50 ml-1">{fmtUsd(item.tradeUsd)}</span></div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function RejectReasonsPanel({ rejectReasons = {} }) {
-  const entries = Object.entries(rejectReasons || {}).filter(([, v]) => Number(v) > 0);
-
-  return (
-    <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-      <CardHeader>
-        <CardTitle className="text-slate-100 flex items-center gap-2">
-          <ShieldAlert className="w-5 h-5 text-rose-400" />
-          Reject Reasons
-        </CardTitle>
-        <CardDescription className="text-slate-400">
-          Why the engine filtered names out before showing them.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {entries.length === 0 ? (
-          <div className="text-slate-400">No reject data available.</div>
-        ) : (
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {entries.map(([label, value]) => (
-              <RejectReasonCard
-                key={label}
-                label={label.replaceAll("_", " ")}
-                value={value}
-              />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function SnitchDashboardApp() {
-  const [data, setData] = useState(starterData);
-  const [selected, setSelected] = useState(null);
-  const [search, setSearch] = useState("");
-  const [minScore, setMinScore] = useState("0");
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [dataUrl, setDataUrl] = useState(getDefaultDataUrl());
-  const [fetchState, setFetchState] = useState("idle");
-  const [fetchMessage, setFetchMessage] = useState("Using starter data");
-  const [showSourceTools, setShowSourceTools] = useState(false);
-  const [manualWatch, setManualWatch] = useState([]);
-  const fileRef = useRef(null);
-
-  const loadParsedData = (parsed, sourceLabel = "Loaded data") => {
-    const normalized = normalizeIncomingData(parsed);
-    setData(normalized);
-    setSelected(
-      normalized.tradeFocusNow?.[0] ??
-        normalized.emergingPotential?.[0] ??
-        normalized.cautionAvoid?.[0] ??
-        null
-    );
-    setFetchMessage(sourceLabel);
-  };
-
-  const fetchRemoteData = async () => {
-    if (!dataUrl) return;
-    try {
-      setFetchState("loading");
-      const res = await fetch(dataUrl, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const parsed = await res.json();
-      loadParsedData(parsed, `Connected to ${dataUrl}`);
-      setFetchState("ok");
-    } catch {
-      setFetchState("warn");
-      setFetchMessage(`Could not fetch ${dataUrl}`);
-    }
-  };
-
-  useEffect(() => {
-    fetchRemoteData();
-  }, []);
-
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(fetchRemoteData, 30000);
-    return () => clearInterval(id);
-  }, [autoRefresh, dataUrl]);
-
-  const formatRelativeUpdate = (asOf) => {
-    if (!asOf) return "Update time unavailable";
-    if (String(asOf).includes("Bootstrapped")) return `Last sync: ${asOf}`;
-    const parsed = new Date(String(asOf).replace(" UTC", "Z"));
-    if (Number.isNaN(parsed.getTime())) return `Last sync: ${asOf}`;
-    const diffMs = Date.now() - parsed.getTime();
-    const diffMin = Math.max(0, Math.floor(diffMs / 60000));
-    if (diffMin < 1) return "Updated just now";
-    if (diffMin === 1) return "Updated 1 min ago";
-    if (diffMin < 60) return `Updated ${diffMin} mins ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr === 1) return "Updated 1 hour ago";
-    return `Updated ${diffHr} hours ago`;
-  };
-
-  const allCards = useMemo(() => {
-    const merged = [
-      ...(data.tradeFocusNow || []),
-      ...(data.emergingPotential || []),
-      ...(data.cautionAvoid || []),
-    ];
-
-    return merged.filter((x) => {
-      const scoreOk = Number(x.score || 0) >= Number(minScore || 0);
-      const text = `${x.token} ${x.pair} ${x.direction} ${x.action}`.toLowerCase();
-      const searchOk = !search || text.includes(search.toLowerCase());
-      return scoreOk && searchOk;
-    });
-  }, [data, search, minScore]);
-
-  const majorsList = useMemo(() => {
-    return [...allCards]
-      .filter((x) => x.isMajor)
-      .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
-      .slice(0, 8);
-  }, [allCards]);
-
-  const sniperPicks = useMemo(() => {
-    return [...allCards]
-      .filter((x) => !x.isMajor && Number(x.score || 0) >= 8.5 && Number(x.impactPct || 0) >= 1)
-      .sort((a, b) => {
-        const aRank = Number(a.score || 0) * 1000 + Number(a.impactPct || 0) * 100 + Math.log10(Math.max(1, Number(a.tradeUsd || 1)));
-        const bRank = Number(b.score || 0) * 1000 + Number(b.impactPct || 0) * 100 + Math.log10(Math.max(1, Number(b.tradeUsd || 1)));
-        return bRank - aRank;
-      })
-      .slice(0, 4);
-  }, [allCards]);
-
-  const perfBars = data.performance.scoreTrend || [];
-  const pieData = data.performance.actionMix || [];
-  const COLORS = ["#22c55e", "#f59e0b", "#ef4444"];
-  const funnel = data.marketFunnel || starterData.marketFunnel;
-
-  const loadJson = async (file) => {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    loadParsedData(parsed, `Loaded file: ${file.name}`);
-    setFetchState("ok");
-  };
-
-  const promotePotentialToken = (token) => {
-    setManualWatch((prev) => {
-      if (prev.find((x) => x.token === token.token)) return prev;
-      return [token, ...prev].slice(0, 6);
-    });
-  };
-
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.12),_transparent_24%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] text-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-                  <Radar className="w-6 h-6 text-emerald-300" />
-                </div>
-                <div>
-                  <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">SNITCH Alert Dashboard</h1>
-                  <p className="text-slate-400 mt-1">Dark premium signal workspace for fast trading decisions</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 items-center">
-              <Badge className="rounded-xl bg-slate-900/80 border border-slate-700 text-slate-200">
-                <Clock3 className="w-3.5 h-3.5 mr-1" />
-                {formatRelativeUpdate(data.meta.asOf)}
-              </Badge>
-              <Badge className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
-                {data.meta.marketBias}
-              </Badge>
-              <StatusPill
-                status={fetchState === "ok" ? "ok" : fetchState === "warn" ? "warn" : "idle"}
-                text={fetchState === "ok" ? "Live data" : fetchState === "warn" ? "Fallback data" : "Starter data"}
-              />
-              <StatusPill status={autoRefresh ? "ok" : "idle"} text={autoRefresh ? "Auto refresh on" : "Manual refresh"} />
-            </div>
-          </div>
-        </motion.div>
-
-        <div className="grid xl:grid-cols-[1.25fr_0.75fr] gap-6 mb-6">
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardContent className="p-5 sm:p-6">
-              <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-                <MiniMetric icon={Activity} label="Qualified" value={data.metrics.qualifiedSignals} />
-                <MiniMetric icon={Target} label="Focus" value={data.metrics.tradeFocus} />
-                <MiniMetric icon={Rocket} label="Emerging" value={data.metrics.emerging} />
-                <MiniMetric icon={TriangleAlert} label="Caution" value={data.metrics.caution} />
-                <MiniMetric icon={Gauge} label="Avg Confidence" value={`${data.metrics.avgConfidence}%`} />
-                <MiniMetric icon={TrendingUp} label="30D Win Rate" value={`${data.metrics.winRate30d}%`} />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardContent className="p-5 sm:p-6 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm text-slate-300">
-                  <Database className="w-4 h-4 text-slate-400" />
-                  Data Source
-                </div>
-                <Button
-                  variant="outline"
-                  className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
-                  onClick={() => setShowSourceTools((v) => !v)}
-                >
-                  {showSourceTools ? "Hide technical tools" : "Show technical tools"}
-                </Button>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
-                <div className="font-medium text-slate-100 mb-1">Current status</div>
-                <div>{fetchMessage}</div>
-              </div>
-
-              {showSourceTools && (
-                <>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Link2 className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
-                      <Input
-                        value={dataUrl}
-                        onChange={(e) => setDataUrl(e.target.value)}
-                        placeholder={getDefaultDataUrl()}
-                        className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100"
-                      />
-                    </div>
-                    <Button className="rounded-2xl bg-slate-100 text-slate-950 hover:bg-white" onClick={fetchRemoteData}>
-                      Connect
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 flex-wrap text-xs text-slate-400">
-                    <div className="flex items-center gap-2">
-                      {fetchState === "ok" ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-amber-400" />
-                      )}
-                      <span>{fetchMessage}</span>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
-                        onClick={() => setAutoRefresh((v) => !v)}
-                      >
-                        <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? "animate-spin" : ""}`} />
-                        {autoRefresh ? "Auto Refresh On" : "Auto Refresh Off"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl border-slate-700 text-slate-200 hover:bg-slate-900"
-                        onClick={() => fileRef.current?.click()}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Load JSON
-                      </Button>
-                      <input
-                        ref={fileRef}
-                        type="file"
-                        accept="application/json"
-                        className="hidden"
-                        onChange={(e) => e.target.files?.[0] && loadJson(e.target.files[0])}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6 mb-6">
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search token, pair, action"
-                  className="pl-9 rounded-2xl bg-slate-900 border-slate-800 text-slate-100"
-                />
-              </div>
-              <Select value={minScore} onValueChange={setMinScore}>
-                <SelectTrigger className="w-full sm:w-44 rounded-2xl bg-slate-900 border-slate-800 text-slate-100">
-                  <Filter className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Min score" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-950 border-slate-800 text-slate-100">
-                  <SelectItem value="0">Min score 0</SelectItem>
-                  <SelectItem value="4">Min score 4</SelectItem>
-                  <SelectItem value="5">Min score 5</SelectItem>
-                  <SelectItem value="6">Min score 6</SelectItem>
-                  <SelectItem value="7">Min score 7</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardContent className="p-5 sm:p-6 text-sm text-slate-300 leading-6">
-              <div className="font-medium text-slate-100 mb-1">How to use this</div>
-              Focus means highest-priority setups to inspect now. Emerging means promising but not fully confirmed. Caution means avoid new exposure or reduce risk.
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid gap-6 mb-6">
-          <SniperPicks items={sniperPicks} onOpen={setSelected} />
-        </div>
-
-        {manualWatch.length > 0 && (
-          <div className="grid gap-6 mb-6">
-            <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-              <CardHeader>
-                <CardTitle className="text-slate-100 flex items-center gap-2">
-                  <Coins className="w-5 h-5 text-amber-300" />
-                  Manual Watchlist
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Potential tokens you manually promoted for closer monitoring.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {manualWatch.map((item) => (
-                    <div key={item.token} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-slate-50 font-semibold">{item.token}</div>
-                        <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/30">{item.confidence}</Badge>
-                      </div>
-                      <div className="text-slate-400 text-sm mt-2">{item.thesis}</div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        <div className="grid lg:grid-cols-[1fr_1fr] gap-6 mb-6">
-          <MajorsMonitor items={majorsList} onOpen={setSelected} />
-          <RejectReasonsPanel rejectReasons={funnel.rejectReasons || {}} />
-        </div>
-
-        <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6 mb-6">
-          <Tabs defaultValue="focus" className="w-full">
-            <TabsList className="w-full bg-slate-950/70 border border-slate-800 rounded-2xl p-1 grid grid-cols-3">
-              <TabsTrigger value="focus" className="rounded-2xl">Trade Focus</TabsTrigger>
-              <TabsTrigger value="emerging" className="rounded-2xl">Emerging</TabsTrigger>
-              <TabsTrigger value="caution" className="rounded-2xl">Caution</TabsTrigger>
-            </TabsList>
-            <TabsContent value="focus" className="mt-4">
-              <SectionGrid title="Trade Focus Now" desc="Highest priority names to monitor immediately." items={data.tradeFocusNow.filter((x) => allCards.includes(x))} onOpen={setSelected} />
-            </TabsContent>
-            <TabsContent value="emerging" className="mt-4">
-              <SectionGrid title="Emerging Potential" desc="Early setups that still need confirmation." items={data.emergingPotential.filter((x) => allCards.includes(x))} onOpen={setSelected} />
-            </TabsContent>
-            <TabsContent value="caution" className="mt-4">
-              <SectionGrid title="Caution / Avoid" desc="Risky or bearish structures that need caution." items={data.cautionAvoid.filter((x) => allCards.includes(x))} onOpen={setSelected} />
-            </TabsContent>
-          </Tabs>
-
-          <DetailPanel item={selected} />
-        </div>
-
-        <div className="grid xl:grid-cols-[0.8fr_1.2fr] gap-6 mb-6">
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Action Mix</CardTitle>
-              <CardDescription className="text-slate-400">Distribution of current dashboard actions</CardDescription>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95} paddingAngle={3}>
-                    {pieData.map((entry, index) => (
-                      <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Performance Matrix</CardTitle>
-              <CardDescription className="text-slate-400">Focus, emerging, and caution trend over recent sessions</CardDescription>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={perfBars}>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
-                  <XAxis dataKey="name" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip contentStyle={{ background: "#020617", border: "1px solid #334155", borderRadius: 16 }} />
-                  <Legend />
-                  <Bar dataKey="focus" fill="#22c55e" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="emerging" fill="#f59e0b" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="caution" fill="#ef4444" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid xl:grid-cols-[0.9fr_1.1fr] gap-6 mb-6">
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Proof Snapshot</CardTitle>
-              <CardDescription className="text-slate-400">Quick performance metrics</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
-              {(data.performance.proof || []).map((p) => (
-                <div key={p.metric} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                  <div className="text-slate-400 text-xs">{p.metric}</div>
-                  <div className="text-slate-50 text-2xl font-semibold mt-2">{p.value}</div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Recent Qualified Signals</CardTitle>
-              <CardDescription className="text-slate-400">Latest filtered signals worth attention</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {(data.recentSignals || []).map((r) => (
-                  <button
-                    key={`${r.time}-${r.token}`}
-                    onClick={() => {
-                      const found = [...data.tradeFocusNow, ...data.emergingPotential, ...data.cautionAvoid].find((x) => x.token === r.token);
-                      if (found) setSelected(found);
-                    }}
-                    className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:bg-slate-900 transition"
-                  >
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <div className="text-slate-50 font-medium">
-                          {r.token} <span className="text-slate-500 font-normal">· {r.pair}</span>
-                        </div>
-                        <div className="text-slate-400 text-sm mt-1">{r.direction}</div>
-                      </div>
-                      <div className="text-right">
-                        <Badge className={actionBadge(r.action)}>{r.action}</Badge>
-                        <div className="text-slate-400 text-xs mt-2">{r.time}</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Score <span className="text-slate-50 ml-1">{r.score}</span></div>
-                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">Impact <span className="text-slate-50 ml-1">{r.impact}</span></div>
-                      <div className="rounded-xl bg-slate-950/60 px-3 py-2 border border-slate-800">USD <span className="text-slate-50 ml-1">{r.usd}</span></div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-6 mb-6">
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Scan Funnel</CardTitle>
-              <CardDescription className="text-slate-400">See how much the engine scanned versus what survived filtering.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <FunnelCard label="Scanned" value={funnel.scanned} tone="slate" />
-              <FunnelCard label="Rejected" value={funnel.rejected} tone="rose" />
-              <FunnelCard label="Qualified" value={funnel.qualified} tone="emerald" />
-              <FunnelCard label="Displayed" value={funnel.displayed} tone="amber" />
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-950/70 border-slate-800 rounded-3xl shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Tradability Confidence</CardTitle>
-              <CardDescription className="text-slate-400">
-                Use this to separate early ideas from names you can trade with more confidence.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-300">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <div className="text-slate-100 font-medium mb-2">Trade with more confidence</div>
-                <div className="text-slate-400">Listed or watchable on major venues, enough liquidity, and better execution conditions.</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {[...data.tradeFocusNow, ...data.emergingPotential]
-                    .filter((x) => x.binanceTradable)
-                    .map((x) => (
-                      <Badge key={x.token} className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
-                        {x.token}
-                      </Badge>
-                    ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <div className="text-slate-100 font-medium mb-2">Watch but size carefully</div>
-                <div className="text-slate-400">Potential exists, but venue/liquidity/risk means smaller size or slower confirmation.</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {[...data.emergingPotential, ...data.cautionAvoid]
-                    .filter((x) => !x.binanceTradable)
-                    .map((x) => (
-                      <Badge key={x.token} className="bg-amber-500/15 text-amber-300 border-amber-500/30">
-                        {x.token}
-                      </Badge>
-                    ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-6">
-          <PotentialTokenTable items={data.potentialTokens || []} onPromote={promotePotentialToken} />
-          <PresaleWatchlist items={data.presaleWatchlist || []} />
-        </div>
-      </div>
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+      <div className="mb-2 text-sm uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="text-lg leading-8 text-slate-100">{value}</div>
     </div>
   );
 }
+
+function TokenCard({ item, onSelect, selected }) {
+  return (
+    <Card
+      onClick={() => onSelect?.(item)}
+      className={cn(
+        "cursor-pointer rounded-3xl border bg-slate-950/70 shadow-2xl transition-all duration-200",
+        selected ? "border-cyan-400/50 ring-1 ring-cyan-400/40" : "border-slate-800 hover:border-slate-700"
+      )}
+    >
+      <CardContent className="space-y-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-4xl font-bold text-slate-50">{item.token}</div>
+            <div className="mt-1 text-xl text-slate-400">{item.pair}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
+              {item.actionShort}
+            </Badge>
+            {item.entryType && (
+              <Badge className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300">
+                {item.entryType}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <TinyInfo label="Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
+          <TinyInfo label="Risk" value={item.risk} valueClassName={riskClass(item.risk).includes("emerald") ? "text-emerald-300" : riskClass(item.risk).includes("amber") ? "text-amber-300" : "text-rose-300"} />
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between text-slate-400">
+            <span>Signal Strength</span>
+            <span>{Math.round(toNumber(item.score) * 10)}/100</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300"
+              style={{ width: `${Math.max(8, Math.min(100, Math.round(toNumber(item.score) * 10)))}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="text-2xl leading-10 text-slate-200">{item.why}</div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <TinyInfo label="Trade USD" value={fmtCompactUsd(item.tradeUsd)} />
+          <TinyInfo label="Impact" value={fmtPercent(item.impactPct)} />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <MiniPlan label="Buy Zone" value={fmtZone(item.buyZone)} />
+          <MiniPlan label="Breakout" value={fmtPrice(item.breakoutTrigger)} />
+          <MiniPlan label="Invalidation" value={fmtPrice(item.invalidation)} />
+          <MiniPlan label="TP1 / TP2" value={`${fmtPrice(item.tp1)} / ${fmtPrice(item.tp2)}`} />
+          <MiniPlan label="RR" value={fmtRR(item.rr)} />
+          <MiniPlan label="Sector" value={item.sector || "General"} />
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button className="rounded-2xl bg-white text-slate-950 hover:bg-slate-100">
+            <Eye className="mr-2 h-4 w-4" />
+            Open Detail
+          </Button>
+          <Button variant="outline" className="rounded-2xl border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900">
+            <Zap className="mr-2 h-4 w-4" />
+            Set Alert
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniPlan({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+      <div className="text-sm text-slate-400">{label}</div>
+      <div className="mt-2 text-xl font-medium text-slate-100">{value}</div>
+    </div>
+  );
+}
+
+function SectionHeader({ icon, title, desc }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-3">
+        {icon}
+        <h2 className="text-4xl font-bold text-slate-50">{title}</h2>
+      </div>
+      <p className="mt-2 text-xl text-slate-400">{desc}</p>
+    </div>
+  );
+}
+
+function EmptyState({ text = "No clean setup in this section right now." }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/50 shadow-2xl">
+      <CardContent className="p-10 text-3xl text-slate-400">{text}</CardContent>
+    </Card>
+  );
+}
+
+function RejectReasonsCard({ reasons }) {
+  const entries = Object.entries(reasons || {})
+    .map(([name, value]) => ({ name, value: toNumber(value) }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+          <ShieldAlert className="h-6 w-6 text-rose-300" />
+          Reject Reasons
+        </CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Why the engine filtered names out before showing them.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {entries.length === 0 ? (
+          <div className="text-slate-400">No reject reasons available.</div>
+        ) : (
+          entries.map((item) => (
+            <div key={item.name} className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+              <div className="text-lg uppercase tracking-wide text-slate-400">{item.name.replaceAll("_", " ")}</div>
+              <div className="mt-3 text-5xl font-bold text-rose-300">{item.value}</div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PotentialTokenTable({ items, onQuickSelect }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-4xl text-slate-50">Potential Tokens</CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Broader opportunities beyond the current qualified shortlist.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {items.length === 0 ? (
+          <div className="text-slate-400">No potential tokens found right now.</div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.token}
+              className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5 cursor-pointer hover:border-slate-700"
+              onClick={() => onQuickSelect?.(item.token)}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-3xl font-bold text-slate-100">{item.token}</div>
+                  <div className="mt-2 text-lg text-slate-400">{item.thesis}</div>
+                </div>
+                <Badge className="rounded-full border border-slate-700 bg-slate-950/70 px-4 py-2 text-sm text-slate-200">
+                  {item.confidence}
+                </Badge>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                <MiniPlan label="Price" value={item.price || "N/A"} />
+                <MiniPlan label="FDV" value={item.fdv || "N/A"} />
+                <MiniPlan label="Liquidity" value={item.liquidity || "N/A"} />
+                <MiniPlan label="24H Volume" value={item.volume24h || "N/A"} />
+                <MiniPlan label="Stage" value={item.listingStage || "N/A"} />
+                <MiniPlan label="Tradability" value={item.exchange || "N/A"} />
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <MiniPlan label="Buy Zone" value={fmtZone(item.buyZone)} />
+                <MiniPlan label="Breakout" value={fmtPrice(item.breakoutTrigger)} />
+                <MiniPlan label="RR" value={fmtRR(item.rr)} />
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PresaleTable({ items }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="text-4xl text-slate-50">Presale Watchlist</CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          Curated names to review manually before any capital decision.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {items.length === 0 ? (
+          <div className="text-slate-400">No presale list available.</div>
+        ) : (
+          items.map((item) => (
+            <div key={item.project} className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-3xl font-bold text-slate-100">{item.project}</div>
+                  <div className="mt-1 text-lg text-slate-400">
+                    {item.stage} · {item.launchDate}
+                  </div>
+                </div>
+                <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.action))}>
+                  {item.action}
+                </Badge>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <MiniPlan label="Trust Score" value={String(item.trustScore)} />
+                <MiniPlan label="Tokenomics Score" value={String(item.tokenomicsScore)} />
+                <MiniPlan label="Vesting" value={item.vesting} />
+                <MiniPlan label="Audit" value={item.audit} />
+                <MiniPlan label="Red Flags" value={item.redFlags} />
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function App() {
+  const {
+    dashboard,
+    dataUrl,
+    setDataUrl,
+    fetchDashboard,
+    loading,
+    fetchMessage,
+    autoRefresh,
+    setAutoRefresh,
+    technicalOpen,
+    setTechnicalOpen,
+  } = useDashboardData();
+
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState("focus");
+  const [selectedToken, setSelectedToken] = useState(null);
+
+  const tradeFocusNow = safeArray(dashboard.tradeFocusNow);
+  const executionReady = safeArray(dashboard.executionReady);
+  const majorMonitor = safeArray(dashboard.majorMonitor);
+  const topSniperPicks = safeArray(dashboard.topSniperPicks);
+  const emergingPotential = safeArray(dashboard.emergingPotential);
+  const cautionAvoid = safeArray(dashboard.cautionAvoid);
+  const potentialTokens = safeArray(dashboard.potentialTokens);
+  const presaleWatchlist = safeArray(dashboard.presaleWatchlist);
+  const recentSignals = safeArray(dashboard.recentSignals);
+  const scoreTrend = safeArray(dashboard.performance?.scoreTrend);
+  const actionMix = safeArray(dashboard.performance?.actionMix);
+  const proof = safeArray(dashboard.performance?.proof);
+
+  useEffect(() => {
+    const firstCandidate =
+      executionReady[0] ||
+      topSniperPicks[0] ||
+      tradeFocusNow[0] ||
+      emergingPotential[0] ||
+      cautionAvoid[0] ||
+      majorMonitor[0] ||
+      null;
+    setSelectedToken(firstCandidate);
+  }, [dashboard]);
+
+  const allCards = useMemo(() => {
+    const map = new Map();
+    [...tradeFocusNow, ...executionReady, ...topSniperPicks, ...majorMonitor, ...emergingPotential, ...cautionAvoid].forEach((item) => {
+      if (!item?.token) return;
+      map.set(item.token, item);
+    });
+    return [...map.values()];
+  }, [tradeFocusNow, executionReady, topSniperPicks, majorMonitor, emergingPotential, cautionAvoid]);
+
+  const filteredFocus = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base =
+      tab === "focus"
+        ? tradeFocusNow
+        : tab === "emerging"
+        ? emergingPotential
+        : cautionAvoid;
+
+    if (!q) return base;
+    return base.filter((item) => {
+      const hay = `${item.token} ${item.pair} ${item.actionShort} ${item.sector} ${item.entryType}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [tab, query, tradeFocusNow, emergingPotential, cautionAvoid]);
+
+  const handleQuickSelectPotential = (token) => {
+    const found = allCards.find((x) => x.token === token);
+    if (found) {
+      setSelectedToken(found);
+      return;
+    }
+    setQuery(token);
+  };
+
+  const mixColors = ["#34d399", "#f59e0b", "#f87171", "#38bdf8", "#a78bfa"];
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.15),_transparent_20%),radial-gradient(circle_at_top,_rgba(6,182,212,0.12),_transparent_25%),linear-gradient(180deg,#020617_0%,#020617_100%)] text-slate-100">
+      <div className="mx-auto max-w-[1700px] px-4 py-5 md:px-8 md:py-8">
+        <Card className="overflow-hidden rounded-[36px] border-slate-800 bg-slate-950/60 shadow-[0_0_80px_rgba(0,0,0,0.35)]">
+          <div className="border-b border-slate-800 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_18%),linear-gradient(90deg,rgba(2,6,23,1)_0%,rgba(2,6,23,0.96)_50%,rgba(2,6,23,1)_100%)] p-4 md:p-8">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+              <div className="max-w-4xl">
+                <div className="flex items-start gap-4">
+                  <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                    <Radar className="h-8 w-8 text-emerald-300" />
+                  </div>
+                  <div>
+                    <h1 className="text-5xl font-bold tracking-tight text-slate-50 md:text-7xl">
+                      {dashboard.meta?.product || "SNITCH Alert Dashboard"}
+                    </h1>
+                    <p className="mt-2 text-2xl text-slate-400 md:text-3xl">
+                      Dark premium signal workspace for fast trading decisions
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Badge className="rounded-full border border-slate-700 bg-slate-950/70 px-4 py-2 text-base text-slate-200">
+                    <Clock3 className="mr-2 h-4 w-4" />
+                    Last sync: {dashboard.meta?.asOf}
+                  </Badge>
+                  <Badge className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-base text-emerald-300">
+                    {dashboard.meta?.marketBias}
+                  </Badge>
+                  <Badge className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-base text-emerald-300">
+                    Live data
+                  </Badge>
+                  <Badge className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-base text-emerald-300">
+                    {autoRefresh ? "Auto refresh on" : "Auto refresh off"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <MetricCard label="Qualified" value={dashboard.metrics?.qualifiedSignals ?? 0} icon={<Signal className="h-4 w-4" />} />
+              <MetricCard label="Focus" value={dashboard.metrics?.tradeFocus ?? 0} icon={<Target className="h-4 w-4" />} />
+              <MetricCard label="Emerging" value={dashboard.metrics?.emerging ?? 0} icon={<Rocket className="h-4 w-4" />} />
+              <MetricCard label="Caution" value={dashboard.metrics?.caution ?? 0} icon={<AlertTriangle className="h-4 w-4" />} />
+              <MetricCard label="Avg Confidence" value={`${dashboard.metrics?.avgConfidence ?? 0}%`} icon={<GaugeIcon />} />
+              <MetricCard label="30D Win Rate" value={`${dashboard.metrics?.winRate30d ?? 0}%`} icon={<TrendingUp className="h-4 w-4" />} />
+            </div>
+          </div>
+
+          <div className="space-y-8 p-4 md:p-8">
+            <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+                    <Database className="h-6 w-6 text-slate-300" />
+                    Data Source
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    onClick={() => setTechnicalOpen((s) => !s)}
+                    className="rounded-full border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900"
+                  >
+                    {technicalOpen ? "Hide technical tools" : "Show technical tools"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+                  <div className="text-lg font-medium text-slate-200">Current status</div>
+                  <div className="mt
