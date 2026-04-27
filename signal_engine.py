@@ -114,14 +114,14 @@ def opportunity_score(
     score = 0.0
 
     if is_major:
-        score += 3.2
+        score += 3.1
     else:
         if 0 < fdv <= 20_000_000:
-            score += 3.5
+            score += 3.4
         elif fdv <= 50_000_000:
-            score += 3.0
+            score += 2.9
         elif fdv <= 100_000_000:
-            score += 2.4
+            score += 2.3
         elif fdv <= 180_000_000:
             score += 1.8
         elif fdv <= 300_000_000:
@@ -130,9 +130,9 @@ def opportunity_score(
             score += 0.7
 
         if 0 < market_cap <= 20_000_000:
-            score += 2.2
+            score += 2.1
         elif market_cap <= 50_000_000:
-            score += 1.8
+            score += 1.7
         elif market_cap <= 120_000_000:
             score += 1.2
         elif market_cap <= 300_000_000:
@@ -145,9 +145,9 @@ def opportunity_score(
     elif volume >= 40_000_000:
         score += 1.8
     elif volume >= 10_000_000:
-        score += 1.3
+        score += 1.25
     elif volume >= 3_000_000:
-        score += 0.9
+        score += 0.85
 
     if price <= 5:
         score += 0.8
@@ -219,6 +219,81 @@ def structure_metrics(price: float, snr: Dict[str, Any]) -> Dict[str, float]:
     }
 
 
+def sanitize_structure(price: float, structure: Dict[str, float]) -> Dict[str, float]:
+    support_lo = structure["support_lo"]
+    support_hi = structure["support_hi"]
+    resistance_lo = structure["resistance_lo"]
+    resistance_hi = structure["resistance_hi"]
+    breakout = structure["breakout"]
+    invalidation = structure["invalidation"]
+    tp1 = structure["tp1"]
+    tp2 = structure["tp2"]
+
+    fallback_width = max(price * 0.015, 0.0000001)
+
+    if support_lo <= 0 or support_hi <= 0 or support_hi < support_lo:
+        support_hi = max(price * 0.985, 0.0000001)
+        support_lo = max(support_hi - fallback_width, 0.0000001)
+
+    if breakout <= 0:
+        breakout = price * 1.03
+
+    if resistance_lo <= 0:
+        resistance_lo = max(breakout, price * 1.04)
+
+    if resistance_hi <= 0 or resistance_hi < resistance_lo:
+        resistance_hi = resistance_lo * 1.01
+
+    if invalidation <= 0 or invalidation >= price:
+        invalidation = support_lo * 0.995
+
+    if tp1 <= 0 or tp1 <= price:
+        tp1 = max(breakout * 0.998, price * 1.035)
+
+    if tp2 <= 0 or tp2 <= tp1:
+        tp2 = max(tp1 * 1.03, price * 1.06)
+
+    structure = {
+        **structure,
+        "support_lo": support_lo,
+        "support_hi": support_hi,
+        "resistance_lo": resistance_lo,
+        "resistance_hi": resistance_hi,
+        "breakout": breakout,
+        "invalidation": invalidation,
+        "tp1": tp1,
+        "tp2": tp2,
+    }
+
+    if price > 0:
+        structure["dist_to_support_pct"] = abs(price - support_hi) / price * 100
+        structure["dist_to_breakout_pct"] = abs(breakout - price) / price * 100
+        structure["room_to_resistance_pct"] = abs(resistance_lo - price) / price * 100
+        structure["stop_pct"] = abs(price - invalidation) / price * 100
+        structure["reward1_pct"] = abs(tp1 - price) / price * 100
+        structure["reward2_pct"] = abs(tp2 - price) / price * 100
+
+    return structure
+
+
+def structure_is_sane(price: float, structure: Dict[str, float]) -> bool:
+    if price <= 0:
+        return False
+    if structure["support_lo"] <= 0 or structure["support_hi"] <= 0:
+        return False
+    if structure["invalidation"] <= 0:
+        return False
+    if structure["tp1"] <= price:
+        return False
+    if structure["tp2"] <= structure["tp1"]:
+        return False
+    if structure["stop_pct"] <= 0:
+        return False
+    if structure["stop_pct"] > 25:
+        return False
+    return True
+
+
 def derive_rr(price: float, structure: Dict[str, float], trend: str) -> float:
     if price <= 0:
         return 1.0
@@ -252,6 +327,7 @@ def execution_score(
     trend: str,
     rr: float,
     structure: Dict[str, float],
+    sane_structure: bool,
 ) -> float:
     score = 0.0
 
@@ -262,18 +338,21 @@ def execution_score(
     else:
         score += 0.7
 
-    if structure["dist_to_support_pct"] <= 1.5:
-        score += 3.0
-    elif structure["dist_to_support_pct"] <= 3.0:
-        score += 2.3
-    elif structure["dist_to_support_pct"] <= 5.0:
-        score += 1.4
-    elif structure["dist_to_breakout_pct"] <= 1.1:
-        score += 2.2
-    elif structure["dist_to_breakout_pct"] <= 2.3:
-        score += 1.6
-    elif structure["dist_to_breakout_pct"] <= 4.0:
-        score += 0.9
+    if sane_structure:
+        if structure["dist_to_support_pct"] <= 1.5:
+            score += 3.0
+        elif structure["dist_to_support_pct"] <= 3.0:
+            score += 2.3
+        elif structure["dist_to_support_pct"] <= 5.0:
+            score += 1.4
+        elif structure["dist_to_breakout_pct"] <= 1.1:
+            score += 2.2
+        elif structure["dist_to_breakout_pct"] <= 2.3:
+            score += 1.6
+        elif structure["dist_to_breakout_pct"] <= 4.0:
+            score += 0.9
+    else:
+        score += 0.35
 
     if rr >= 2.2:
         score += 2.3
@@ -302,10 +381,11 @@ def execution_score(
     elif impact_pct >= 0.8:
         score += 0.25
 
-    if structure["room_to_resistance_pct"] >= 7:
-        score += 0.7
-    elif structure["room_to_resistance_pct"] >= 4:
-        score += 0.4
+    if sane_structure:
+        if structure["room_to_resistance_pct"] >= 7:
+            score += 0.7
+        elif structure["room_to_resistance_pct"] >= 4:
+            score += 0.4
 
     return round(clamp(score, 0, 10), 2)
 
@@ -394,10 +474,11 @@ def detect_setup_label(
     volume: float,
     structure: Dict[str, float],
     trend: str,
+    sane_structure: bool,
 ) -> Tuple[str, str, bool, str]:
-    near_support = structure["dist_to_support_pct"] <= 2.4
-    near_breakout = structure["dist_to_breakout_pct"] <= 1.8
-    extended = structure["dist_to_support_pct"] >= 8.5
+    near_support = sane_structure and structure["dist_to_support_pct"] <= 2.4
+    near_breakout = sane_structure and structure["dist_to_breakout_pct"] <= 1.8
+    extended = sane_structure and structure["dist_to_support_pct"] >= 8.5
     strong_momentum = impact_pct >= 2.0
     strong_volume = volume >= 10_000_000
     decent_volume = volume >= 3_000_000
@@ -408,30 +489,30 @@ def detect_setup_label(
         return "REDUCE RISK", "Avoid / Risk-off", False, "caution"
 
     if is_major:
-        if near_support and rr >= 1.25:
+        if sane_structure and near_support and rr >= 1.22:
             return "MAJOR BUY ZONE", "Major Retest Buy", True, "focus"
-        if near_breakout and rr >= 1.20:
+        if sane_structure and near_breakout and rr >= 1.18:
             return "MAJOR BREAKOUT", "Major Breakout Trigger", False, "focus"
-        if extended and strong_momentum:
+        if sane_structure and extended and strong_momentum:
             return "WAIT FOR RETEST", "Major Retest Needed", False, "focus"
         return "WATCH MAJOR", "Major Monitor", False, "emerging"
 
-    if near_support and rr >= 1.65 and strong_momentum and decent_volume:
+    if sane_structure and near_support and rr >= 1.45 and strong_momentum and decent_volume:
         return "BUY NOW", "Retest Buy Zone", True, "focus"
 
-    if near_support and rr >= 1.40 and strong_momentum and decent_volume:
+    if sane_structure and near_support and rr >= 1.28 and decent_volume:
         return "BUY ON RETEST", "Retest Buy", True, "focus"
 
-    if near_breakout and rr >= 1.35 and strong_momentum:
+    if sane_structure and near_breakout and rr >= 1.24 and strong_momentum:
         return "WAIT BREAKOUT", "Breakout Trigger", False, "focus"
 
-    if extended and strong_momentum and final_score >= 7.0:
+    if sane_structure and extended and strong_momentum and final_score >= 6.8:
         return "WAIT FOR RETEST", "Retest Needed", False, "focus"
 
-    if final_score >= 7.0 and (strong_momentum or strong_volume):
+    if sane_structure and final_score >= 6.7 and (strong_momentum or strong_volume):
         return "WAIT FOR CONFIRMATION", "Confirmation Entry", False, "focus"
 
-    if final_score >= 5.8 and (strong_momentum or strong_volume):
+    if final_score >= 5.7 and (strong_momentum or strong_volume):
         return "EARLY MOMENTUM", "Early Momentum", False, "emerging"
 
     return "WATCH", "Watchlist", False, "emerging"
@@ -461,12 +542,15 @@ def build_action_plan(
     volume_ratio = safe_float(snr.get("volumeRatio"), 1.0)
 
     structure = structure_metrics(price, snr)
+    structure = sanitize_structure(price, structure)
+    sane_structure = structure_is_sane(price, structure)
+
     rr = derive_rr(price, structure, trend)
     opp = opportunity_score(market_cap, fdv, volume, price, rank, is_major)
-    exe = execution_score(impact_pct, volume_ratio, trend, rr, structure)
+    exe = execution_score(impact_pct, volume_ratio, trend, rr, structure, sane_structure)
     risk_label, risk_numeric = risk_score(market_cap, volume, tradable, is_major, sector)
 
-    final_score = round(clamp((opp * 0.40) + (exe * 0.60), 0, 10), 2)
+    final_score = round(clamp((opp * 0.42) + (exe * 0.58), 0, 10), 2)
 
     action_short, entry_type, execution_ready, focus_bucket = detect_setup_label(
         direction=direction,
@@ -477,6 +561,7 @@ def build_action_plan(
         volume=volume,
         structure=structure,
         trend=trend,
+        sane_structure=sane_structure,
     )
 
     action = {
@@ -499,7 +584,19 @@ def build_action_plan(
     do_not = "Do not force early entry."
     cancel_if = "Cancel the setup if structure degrades."
 
-    if action_short == "REDUCE RISK":
+    if not sane_structure and direction == "Buy Pressure":
+        action_short = "WATCH"
+        action = "Keep On Watch"
+        entry_type = "Watchlist"
+        execution_ready = False
+        focus_bucket = "emerging"
+        why = "Structure data is still rough, so use it only as a watch candidate."
+        next_step = "Wait for cleaner support, invalidation, and breakout structure."
+        do_not = "Do not execute from incomplete structure."
+        cancel_if = "Cancel if no cleaner structure appears."
+        trap_reason = "fallback structure not clean"
+
+    elif action_short == "REDUCE RISK":
         why = "Selling pressure is currently dominating this structure."
         next_step = f"Wait for reclaim above {fmt_price(structure['breakout'])} before considering fresh long bias."
         do_not = "Do not catch the dip blindly."
@@ -548,7 +645,7 @@ def build_action_plan(
         next_step = f"Wait for either retest nearer {fmt_price(structure['support_hi'])} or better breakout behavior above {fmt_price(structure['breakout'])}."
         do_not = "Do not rush entry on weak structure."
         cancel_if = f"Cancel if price loses {fmt_price(structure['invalidation'])}."
-        trap_reason = "not enough clean edge"
+        trap_reason = trap_reason or "not enough clean edge"
 
     elif action_short == "MAJOR BUY ZONE":
         why = "Major coin is near support with cleaner liquidity and better execution quality."
@@ -608,9 +705,9 @@ def build_action_plan(
         "trapReason": trap_reason,
         "binanceTradable": tradable,
         "exchangeText": exchange_text,
-        "supportZone": snr.get("supportZone", [0, 0]),
-        "resistanceZone": snr.get("resistanceZone", [0, 0]),
-        "buyZone": snr.get("supportZone", [0, 0]),
+        "supportZone": [structure["support_lo"], structure["support_hi"]],
+        "resistanceZone": [structure["resistance_lo"], structure["resistance_hi"]],
+        "buyZone": [structure["support_lo"], structure["support_hi"]],
         "entryAggressive": snr.get("entryAggressive"),
         "entryConfirmation": snr.get("entryConfirmation"),
         "breakoutLevel": structure["breakout"],
@@ -621,4 +718,5 @@ def build_action_plan(
         "rr": rr,
         "trend": trend,
         "history": snr.get("history", []),
+        "saneStructure": sane_structure,
     }
