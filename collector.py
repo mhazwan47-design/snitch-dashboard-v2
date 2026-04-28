@@ -107,7 +107,7 @@ def fetch_coingecko_markets(rules: Dict[str, Any]) -> List[Dict[str, Any]]:
             "order": "volume_desc",
             "per_page": per_page,
             "page": page,
-            "sparkline": "false",
+            "sparkline": "true",
             "price_change_percentage": "24h",
         }
         r = requests.get(COINGECKO_URL, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
@@ -874,6 +874,237 @@ def merge_manual_watchlist(potential_tokens: List[Dict[str, Any]]) -> List[Dict[
     return merged
 
 
+
+# ============================================================
+# SNITCH v12 Extreme Intelligence Layer
+# Purpose:
+# - Stop being a pretty Dexscreener clone.
+# - Build actual support/resistance, entry zones, invalidation,
+#   RR, validity score, and an execution playbook from available data.
+# - Uses CoinGecko sparkline as fallback market structure when Binance is blocked.
+# ============================================================
+
+def percentile(values: List[float], p: float) -> float:
+    clean = sorted([safe_float(x) for x in values if safe_float(x) > 0])
+    if not clean:
+        return 0.0
+    if len(clean) == 1:
+        return clean[0]
+    k = (len(clean) - 1) * (p / 100.0)
+    f = int(k)
+    c = min(f + 1, len(clean) - 1)
+    if f == c:
+        return clean[f]
+    return clean[f] + (clean[c] - clean[f]) * (k - f)
+
+
+def local_swings(prices: List[float], window: int = 3) -> Tuple[List[float], List[float]]:
+    vals = [safe_float(x) for x in prices if safe_float(x) > 0]
+    lows: List[float] = []
+    highs: List[float] = []
+    if len(vals) < (window * 2 + 5):
+        return lows, highs
+    for i in range(window, len(vals) - window):
+        chunk = vals[i - window : i + window + 1]
+        cur = vals[i]
+        if cur == min(chunk):
+            lows.append(cur)
+        if cur == max(chunk):
+            highs.append(cur)
+    return lows, highs
+
+
+def nearest_level(current: float, levels: List[float], side: str) -> float:
+    clean = sorted(set(round(safe_float(x), 12) for x in levels if safe_float(x) > 0))
+    if current <= 0 or not clean:
+        return 0.0
+    if side == "support":
+        below = [x for x in clean if x <= current]
+        return below[-1] if below else min(clean)
+    above = [x for x in clean if x >= current]
+    return above[0] if above else max(clean)
+
+
+def estimate_atr_from_sparkline(prices: List[float]) -> float:
+    vals = [safe_float(x) for x in prices if safe_float(x) > 0]
+    if len(vals) < 5:
+        return 0.0
+    diffs = [abs(vals[i] - vals[i - 1]) for i in range(1, len(vals))]
+    return percentile(diffs, 70)
+
+
+def build_sparkline_structure(row: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Any]:
+    price = safe_float(row.get("current_price"))
+    spark = row.get("sparkline_in_7d") or {}
+    prices = spark.get("price") if isinstance(spark, dict) else []
+    prices = [safe_float(x) for x in (prices or []) if safe_float(x) > 0]
+
+    if price <= 0:
+        return {}
+
+    if len(prices) < 20:
+        change = abs(safe_float(row.get("price_change_percentage_24h")))
+        pad = max(0.006, min(0.04, change / 100.0))
+        support = price * (1 - pad)
+        resistance = price * (1 + pad)
+        quality = "Fallback"
+        atr = price * pad * 0.35
+    else:
+        lows, highs = local_swings(prices, window=3)
+        atr = estimate_atr_from_sparkline(prices)
+        if not lows:
+            lows = [percentile(prices, 10), percentile(prices, 20), percentile(prices, 30)]
+        if not highs:
+            highs = [percentile(prices, 70), percentile(prices, 80), percentile(prices, 90)]
+        support = nearest_level(price, lows + [percentile(prices, 15), percentile(prices, 25)], "support")
+        resistance = nearest_level(price, highs + [percentile(prices, 75), percentile(prices, 85)], "resistance")
+        if support <= 0 or support >= price:
+            support = percentile(prices, 20)
+        if resistance <= 0 or resistance <= price:
+            resistance = percentile(prices, 80)
+        quality = "Sparkline SNR"
+
+    if atr <= 0:
+        atr = max(price * 0.012, abs(resistance - support) * 0.08)
+
+    buy_low = max(0.0, support - atr * 0.35)
+    buy_high = support + atr * 0.45
+    invalidation = max(0.0, support - atr * 1.35)
+    breakout = resistance + atr * 0.25
+
+    entry = buy_high if buy_high > 0 else price
+    risk = max(entry - invalidation, price * 0.002)
+    tp1 = max(resistance, entry + risk * 1.6)
+    tp2 = max(tp1 + risk * 0.8, entry + risk * 2.4)
+    rr = (tp1 - entry) / risk if risk > 0 else 0.0
+
+    if price <= buy_high * 1.01:
+        range_pos = "NEAR_SUPPORT"
+    elif price >= breakout * 0.985:
+        range_pos = "NEAR_BREAKOUT"
+    elif price >= resistance * 0.985:
+        range_pos = "NEAR_RESISTANCE"
+    elif price < invalidation:
+        range_pos = "SUPPORT_LOST"
+    else:
+        range_pos = "MID_RANGE"
+
+    return {
+        "nearestSupport": round(support, 12),
+        "nearestResistance": round(resistance, 12),
+        "buyZone": [round(buy_low, 12), round(buy_high, 12)],
+        "breakoutTrigger": round(breakout, 12),
+        "invalidation": round(invalidation, 12),
+        "tp1": round(tp1, 12),
+        "tp2": round(tp2, 12),
+        "rr": round(rr, 2),
+        "rangePosition": range_pos,
+        "zoneQuality": quality,
+        "structureValid": bool(price > invalidation and support > 0 and resistance > support),
+    }
+
+
+def validity_score_v12(item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    flags: List[str] = []
+    checks: List[str] = []
+    score = 50.0
+    volume = safe_float(row.get("total_volume"))
+    market_cap = safe_float(row.get("market_cap"))
+    fdv = safe_float(row.get("fully_diluted_valuation")) or market_cap
+    rank = safe_int(row.get("market_cap_rank"), 999999)
+    price_change = abs(safe_float(row.get("price_change_percentage_24h")))
+    exchange_text = str(item.get("exchangeText") or "")
+
+    if volume >= 50_000_000:
+        score += 16; checks.append("Strong 24H volume")
+    elif volume >= 10_000_000:
+        score += 10; checks.append("Usable 24H volume")
+    elif volume >= 2_000_000:
+        score += 4; checks.append("Speculative volume only")
+    else:
+        score -= 18; flags.append("Weak volume")
+
+    if market_cap >= 1_000_000_000 or rank <= 80:
+        score += 12; checks.append("Recognized market-cap tier")
+    elif market_cap >= 20_000_000:
+        score += 5; checks.append("Small/mid-cap with measurable liquidity")
+    else:
+        score -= 8; flags.append("Very small market cap")
+
+    if fdv > 0 and market_cap > 0 and fdv / max(market_cap, 1) > 8:
+        score -= 10; flags.append("FDV much larger than market cap")
+
+    if "Major" in exchange_text or "Listed" in exchange_text:
+        score += 10; checks.append("Major venue signal available")
+    elif "Unknown" in exchange_text:
+        score -= 8; flags.append("Venue not verified")
+
+    if price_change >= 35:
+        score -= 8; flags.append("24H move already extreme")
+    elif price_change >= 8:
+        checks.append("Momentum active but requires retest")
+
+    score = round(clamp(score), 1)
+    if score >= 75:
+        label = "VALID"
+    elif score >= 55:
+        label = "WATCH"
+    elif score >= 40:
+        label = "SPECULATIVE"
+    else:
+        label = "AVOID"
+    return {"validityScore": score, "validityLabel": label, "validityChecks": checks[:5], "dangerFlags": flags[:5]}
+
+
+def apply_v12_intelligence(item: Dict[str, Any], row: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Any]:
+    item["currentPrice"] = safe_float(row.get("current_price"))
+    buy_low, buy_high = get_buy_zone_bounds(item)
+    need_structure = buy_low <= 0 or buy_high <= 0 or safe_float(item.get("breakoutTrigger")) <= 0
+    if need_structure or rules.get("force_v12_sparkline_snr", True):
+        item.update(build_sparkline_structure(row, rules))
+    item.update(validity_score_v12(item, row))
+    support = item.get("nearestSupport")
+    resistance = item.get("nearestResistance")
+    item["decisionWhy"] = [
+        f"Support near {support}" if support else "Support estimated from recent structure",
+        f"Resistance near {resistance}" if resistance else "Resistance estimated from recent structure",
+        f"Validity: {item.get('validityLabel')} ({item.get('validityScore')}/100)",
+    ]
+    item["buyTriggerText"] = f"Bounce inside buy zone {item.get('buyZone')} or clean retest after breakout {item.get('breakoutTrigger')}"
+    item["sellTriggerText"] = f"Avoid/cancel below invalidation {item.get('invalidation')} or if price rejects resistance"
+    return item
+
+
+def build_action_playbook_v12(items: List[Dict[str, Any]], limit: int = 12) -> List[Dict[str, Any]]:
+    ranked = sorted(
+        items,
+        key=lambda x: (
+            safe_float(x.get("finalConfidence")),
+            safe_float(x.get("executionScore100")),
+            safe_float(x.get("validityScore")),
+            safe_float(x.get("rr")),
+        ),
+        reverse=True,
+    )
+    out = []
+    for x in ranked[:limit]:
+        out.append({
+            "token": x.get("token"),
+            "pair": x.get("pair"),
+            "decision": x.get("finalAction"),
+            "canBuyNow": x.get("canBuyNow"),
+            "confidence": x.get("finalConfidence"),
+            "validity": f"{x.get('validityLabel')} {x.get('validityScore')}/100",
+            "entry": x.get("buyZone"),
+            "breakout": x.get("breakoutTrigger"),
+            "invalid": x.get("invalidation"),
+            "rr": x.get("rr"),
+            "size": x.get("suggestedSize"),
+            "why": x.get("decisionWhy", []),
+        })
+    return out
+
+
 def main() -> None:
     rules = load_json(RULES_FILE, {})
     blacklist = load_json(BLACKLIST_FILE, {"symbols": [], "name_contains": []})
@@ -931,6 +1162,7 @@ def main() -> None:
             rules=rules,
         )
 
+        item = apply_v12_intelligence(item, row, rules)
         item["isMajor"] = is_major_symbol(symbol, row)
         item["executionRank"] = calc_execution_rank(item)
         item["sniperRank"] = calc_sniper_rank(item)
@@ -1100,6 +1332,7 @@ def main() -> None:
     active_for_alerts = focus + emerging + caution + major_monitor + sniper_source
     market_mode = build_market_mode_v11(focus, emerging, caution, major_monitor, reject_reasons)
     execution_alerts = build_execution_alerts_v11(active_for_alerts, int(rules.get("target_execution_alert_count", 10)))
+    action_playbook = build_action_playbook_v12(active_for_alerts, int(rules.get("target_action_playbook_count", 12)))
 
     confidence_source = focus + emerging + major_monitor
     if confidence_source:
@@ -1109,19 +1342,19 @@ def main() -> None:
     else:
         avg_confidence = 0
 
-    data_source_note = "CoinGecko + execution engine v11 + manual presale/watchlist"
+    data_source_note = "CoinGecko + execution engine v12 + manual presale/watchlist"
     if not binance_error:
-        data_source_note = "CoinGecko + Binance SNR + execution engine v11 + manual presale/watchlist"
+        data_source_note = "CoinGecko + Binance SNR + execution engine v12 + manual presale/watchlist"
     else:
         data_source_note = (
-            "CoinGecko + fallback SNR + execution engine v11 + manual presale/watchlist "
+            "CoinGecko + fallback SNR + execution engine v12 + manual presale/watchlist "
             f"| Binance unavailable: {binance_error}"
         )
 
     payload = {
         "meta": {
             "product": "SNITCH Alert Dashboard",
-            "mode": "Execution Monitor v11",
+            "mode": "Execution Monitor v12 Extreme",
             "marketBias": "Neutral",
             "asOf": now_utc_text(),
             "dataSource": data_source_note,
@@ -1141,8 +1374,10 @@ def main() -> None:
             "displayed": qualified,
             "rejectReasons": reject_reasons,
         },
+        "snitchVersion": "v12_extreme_execution_assistant",
         "marketMode": market_mode,
         "executionAlerts": execution_alerts,
+        "actionPlaybook": action_playbook,
         "tradeFocusNow": focus,
         "executionReady": execution_ready,
         "majorMonitor": major_monitor,
