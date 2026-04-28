@@ -74,6 +74,7 @@ const emptyDashboard = {
     cautionCount: 0,
   },
   executionAlerts: [],
+  actionPlaybook: [],
   tradeFocusNow: [],
   executionReady: [],
   majorMonitor: [],
@@ -568,7 +569,10 @@ function ExecutionPlan({ item }) {
           <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
             <CardContent className="space-y-4 p-5">
               <InfoBlock title="Tradability" value={`${item.tradabilityTier || "?"} · ${item.tradabilityLabel || item.exchangeText || "Unknown"}`} />
-              <InfoBlock title="Price zone" value={item.priceZone || "UNKNOWN"} />
+              <InfoBlock title="Price zone" value={item.priceZone || item.rangePosition || "UNKNOWN"} />
+              <InfoBlock title="Validity" value={`${item.validityLabel || "N/A"} · ${fmtScore100(item.validityScore)}`} />
+              <InfoBlock title="Support / Resistance" value={`${fmtPrice(item.nearestSupport)} / ${fmtPrice(item.nearestResistance)}`} />
+              <InfoBlock title="Buy trigger" value={item.buyTriggerText || "Wait for zone confirmation."} />
               <InfoBlock title="Confidence" value={`${fmtScore100(confidence100)} · ${item.confidence || "N/A"}`} />
               <InfoBlock title="Trap reason" value={item.trapReason || "No major trap flagged"} />
             </CardContent>
@@ -636,6 +640,63 @@ function MarketModePanel({ mode, alerts }) {
             )}
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+function ActionPlaybookPanel({ items, onSelect }) {
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+          <Zap className="h-6 w-6 text-amber-300" />
+          v12 Action Playbook
+        </CardTitle>
+        <CardDescription className="text-xl text-slate-400">
+          The part that Dexscreener does not give you: decision, entry, invalidation, size, and reason.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {safeArray(items).length === 0 ? (
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5 text-slate-400">
+            No playbook rows yet. Run collector v12 again and confirm dashboard-current.json has actionPlaybook.
+          </div>
+        ) : (
+          safeArray(items).map((x, idx) => (
+            <div
+              key={`${x.token || idx}-${idx}`}
+              className="cursor-pointer rounded-3xl border border-slate-800 bg-slate-900/50 p-5 hover:border-cyan-500/40"
+              onClick={() => onSelect?.(x.token)}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-3xl font-bold text-slate-100">{x.token} <span className="text-xl font-normal text-slate-500">· {x.pair}</span></div>
+                  <div className="mt-2 text-lg text-slate-400">{x.validity}</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(x.decision))}>{x.decision}</Badge>
+                  <Badge className={cn("rounded-full border px-4 py-2 text-sm", x.canBuyNow === "NO" ? "border-rose-500/40 bg-rose-500/10 text-rose-300" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300")}>Buy: {x.canBuyNow}</Badge>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-5">
+                <MiniPlan label="Confidence" value={fmtScore100(x.confidence)} />
+                <MiniPlan label="Entry Zone" value={fmtZone(x.entry)} />
+                <MiniPlan label="Breakout" value={fmtPrice(x.breakout)} />
+                <MiniPlan label="Invalidation" value={fmtPrice(x.invalid)} />
+                <MiniPlan label="Size" value={x.size || "No entry"} />
+              </div>
+              {safeArray(x.why).length > 0 && (
+                <div className="mt-4 grid gap-2 md:grid-cols-3">
+                  {safeArray(x.why).slice(0, 3).map((w, wi) => (
+                    <div key={wi} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-300">{w}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </CardContent>
     </Card>
   );
@@ -940,6 +1001,7 @@ export default function App() {
   const scoreTrend = safeArray(dashboard.performance?.scoreTrend);
   const actionMix = safeArray(dashboard.performance?.actionMix);
   const proof = safeArray(dashboard.performance?.proof);
+  const actionPlaybook = safeArray(dashboard.actionPlaybook);
   const marketMode = dashboard.marketMode || {};
   const executionAlerts = safeArray(dashboard.executionAlerts);
 
@@ -1114,6 +1176,8 @@ export default function App() {
             </Card>
 
             <MarketModePanel mode={marketMode} alerts={executionAlerts} />
+
+            <ActionPlaybookPanel items={actionPlaybook} onSelect={(token) => { const found = allCards.find((x) => x.token === token); if (found) setSelectedToken(found); }} />
 
             <div className="grid gap-6 xl:grid-cols-3">
               <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl xl:col-span-2">
