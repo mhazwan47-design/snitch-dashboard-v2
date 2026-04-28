@@ -63,6 +63,17 @@ const emptyDashboard = {
     displayed: 0,
     rejectReasons: {},
   },
+  marketMode: {
+    marketMode: "WAITING",
+    headline: "Waiting for clean confirmation.",
+    bestAction: "Set alerts and avoid forcing trades.",
+    executionReadyCount: 0,
+    waitRetestCount: 0,
+    avoidCount: 0,
+    weakMomentumRejects: 0,
+    cautionCount: 0,
+  },
+  executionAlerts: [],
   tradeFocusNow: [],
   executionReady: [],
   majorMonitor: [],
@@ -121,6 +132,38 @@ function fmtRR(value) {
   return `1:${num.toFixed(2)}`;
 }
 
+function normScore100(value, fallbackRawScore = 0) {
+  const direct = toNumber(value, NaN);
+  if (Number.isFinite(direct)) return Math.max(0, Math.min(100, direct));
+  return Math.max(0, Math.min(100, toNumber(fallbackRawScore) * 10));
+}
+
+function getAction(item) {
+  return item?.finalAction || item?.actionShort || item?.action || "WAIT";
+}
+
+function getConfidence100(item) {
+  return normScore100(item?.finalConfidence ?? item?.opportunityScore100, item?.score);
+}
+
+function getOpportunity100(item) {
+  return normScore100(item?.opportunityScore100, item?.score);
+}
+
+function getExecution100(item) {
+  return normScore100(item?.executionScore100, item?.score);
+}
+
+function getRisk100(item) {
+  return normScore100(item?.riskScore100, 5);
+}
+
+function fmtScore100(value) {
+  const n = toNumber(value, NaN);
+  if (!Number.isFinite(n)) return "N/A";
+  return `${Math.round(n)}/100`;
+}
+
 function fmtPrice(value) {
   const num = toNumber(value, NaN);
   if (!Number.isFinite(num)) return "N/A";
@@ -147,10 +190,20 @@ function scoreTone(score) {
   return "text-rose-300";
 }
 
+function scoreTone100(score) {
+  const n = toNumber(score);
+  if (n >= 75) return "text-emerald-400";
+  if (n >= 60) return "text-teal-300";
+  if (n >= 45) return "text-amber-300";
+  return "text-rose-300";
+}
+
 function badgeClass(action) {
   const a = String(action || "").toUpperCase();
   if (
+    a.includes("BUY SMALL") ||
     a.includes("BUY") ||
+    a.includes("BOUNCE") ||
     a.includes("CONFIRMATION") ||
     a.includes("BREAKOUT")
   ) {
@@ -163,7 +216,7 @@ function badgeClass(action) {
   ) {
     return "border-amber-500/40 bg-amber-500/10 text-amber-300";
   }
-  if (a.includes("RISK") || a.includes("REDUCE")) {
+  if (a.includes("AVOID") || a.includes("IGNORE") || a.includes("RISK") || a.includes("REDUCE")) {
     return "border-rose-500/40 bg-rose-500/10 text-rose-300";
   }
   if (a.includes("MAJOR")) {
@@ -212,6 +265,8 @@ function useDashboardData() {
         meta: { ...emptyDashboard.meta, ...(data.meta || {}) },
         metrics: { ...emptyDashboard.metrics, ...(data.metrics || {}) },
         marketFunnel: { ...emptyDashboard.marketFunnel, ...(data.marketFunnel || {}) },
+        marketMode: { ...emptyDashboard.marketMode, ...(data.marketMode || {}) },
+        executionAlerts: safeArray(data.executionAlerts),
         performance: { ...emptyDashboard.performance, ...(data.performance || {}) },
       };
 
@@ -325,7 +380,7 @@ function SectionHeader({ icon, title, desc }) {
   );
 }
 
-function EmptyState({ text = "No clean setup in this section right now." }) {
+function EmptyState({ text = "No trigger fired yet. Dashboard is monitoring support, retest, and risk zones." }) {
   return (
     <Card className="rounded-3xl border-slate-800 bg-slate-950/50 shadow-2xl">
       <CardContent className="p-10 text-3xl text-slate-400">{text}</CardContent>
@@ -334,6 +389,14 @@ function EmptyState({ text = "No clean setup in this section right now." }) {
 }
 
 function TokenCard({ item, onSelect, selected }) {
+  const action = getAction(item);
+  const confidence100 = getConfidence100(item);
+  const opportunity100 = getOpportunity100(item);
+  const execution100 = getExecution100(item);
+  const risk100 = getRisk100(item);
+  const canBuyNow = item.canBuyNow || "WAIT";
+  const alertStatus = item.alertStatus || item.priceZone || "NO_TRIGGER";
+
   return (
     <Card
       onClick={() => onSelect?.(item)}
@@ -349,36 +412,44 @@ function TokenCard({ item, onSelect, selected }) {
             <div className="mt-1 text-xl text-slate-400">{item.pair}</div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
-              {item.actionShort}
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(action))}>
+              {action}
             </Badge>
-            {item.entryType && (
-              <Badge className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300">
-                {item.entryType}
-              </Badge>
-            )}
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", canBuyNow === "NO" ? "border-rose-500/40 bg-rose-500/10 text-rose-300" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300")}>
+              Can Buy: {canBuyNow}
+            </Badge>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <TinyInfo label="Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
-          <TinyInfo label="Risk" value={item.risk} valueClassName={riskTextClass(item.risk)} />
+          <TinyInfo label="Confidence" value={fmtScore100(confidence100)} valueClassName={scoreTone100(confidence100)} />
+          <TinyInfo label="Risk" value={item.risk || fmtScore100(risk100)} valueClassName={riskTextClass(item.risk)} />
         </div>
 
         <div>
           <div className="mb-2 flex items-center justify-between text-slate-400">
-            <span>Signal Strength</span>
-            <span>{Math.round(toNumber(item.score) * 10)}/100</span>
+            <span>Decision Confidence</span>
+            <span>{Math.round(confidence100)}/100</span>
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300"
-              style={{ width: `${Math.max(8, Math.min(100, Math.round(toNumber(item.score) * 10)))}%` }}
+              style={{ width: `${Math.max(8, Math.min(100, Math.round(confidence100)))}%` }}
             />
           </div>
         </div>
 
-        <div className="text-2xl leading-10 text-slate-200">{item.why}</div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+          <div className="text-sm uppercase tracking-wide text-slate-400">Action Assistant</div>
+          <div className="mt-2 text-xl font-semibold text-slate-100">{item.alertMessage || item.nextStep || item.why}</div>
+          <div className="mt-2 text-sm text-slate-400">Size: {item.suggestedSize || "No entry yet"}</div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <MiniPlan label="Opp" value={fmtScore100(opportunity100)} />
+          <MiniPlan label="Exec" value={fmtScore100(execution100)} />
+          <MiniPlan label="Risk" value={fmtScore100(risk100)} />
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <TinyInfo label="Trade USD" value={fmtCompactUsd(item.tradeUsd)} />
@@ -390,8 +461,8 @@ function TokenCard({ item, onSelect, selected }) {
           <MiniPlan label="Breakout" value={fmtPrice(item.breakoutTrigger)} />
           <MiniPlan label="Invalidation" value={fmtPrice(item.invalidation)} />
           <MiniPlan label="TP1 / TP2" value={`${fmtPrice(item.tp1)} / ${fmtPrice(item.tp2)}`} />
-          <MiniPlan label="RR" value={fmtRR(item.rr)} />
-          <MiniPlan label="Sector" value={item.sector || "General"} />
+          <MiniPlan label="Alert" value={alertStatus.replaceAll("_", " ")} />
+          <MiniPlan label="Tradability" value={item.tradabilityLabel || item.exchangeText || "Unknown"} />
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -420,6 +491,13 @@ function ExecutionPlan({ item }) {
     );
   }
 
+  const action = getAction(item);
+  const confidence100 = getConfidence100(item);
+  const opportunity100 = getOpportunity100(item);
+  const execution100 = getExecution100(item);
+  const risk100 = getRisk100(item);
+  const canBuyNow = item.canBuyNow || "WAIT";
+
   return (
     <Card className="h-full rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
       <CardHeader className="border-b border-slate-800 pb-5">
@@ -431,27 +509,41 @@ function ExecutionPlan({ item }) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(item.actionShort))}>
-              {item.actionShort}
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", badgeClass(action))}>
+              {action}
             </Badge>
-            <Badge className={cn("rounded-full border px-4 py-2 text-sm", riskBadgeClass(item.risk))}>
-              {item.risk}
+            <Badge className={cn("rounded-full border px-4 py-2 text-sm", canBuyNow === "NO" ? "border-rose-500/40 bg-rose-500/10 text-rose-300" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300")}>
+              Can Buy: {canBuyNow}
             </Badge>
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-5 p-6">
+        <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+          <div className="text-sm uppercase tracking-wide text-emerald-300">Decision</div>
+          <div className="mt-2 text-3xl font-bold text-slate-50">{action}</div>
+          <div className="mt-2 text-lg leading-8 text-slate-300">{item.alertMessage || item.nextStep || item.whatToDo || "Wait for confirmation."}</div>
+          <div className="mt-3 text-lg text-amber-200">Suggested size: {item.suggestedSize || "No entry yet"}</div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <TinyInfo label="Opportunity" value={fmtScore100(opportunity100)} valueClassName={scoreTone100(opportunity100)} />
+          <TinyInfo label="Execution" value={fmtScore100(execution100)} valueClassName={scoreTone100(execution100)} />
+          <TinyInfo label="Risk Score" value={fmtScore100(risk100)} valueClassName={scoreTone100(100 - risk100)} />
+          <TinyInfo label="Confidence" value={fmtScore100(confidence100)} valueClassName={scoreTone100(confidence100)} />
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
-          <TinyInfo label="Action Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
+          <TinyInfo label="Old Action Score" value={fmtPlain(item.score)} valueClassName={scoreTone(item.score)} />
           <TinyInfo label="Liquidity Impact" value={fmtPercent(item.impactPct)} />
           <TinyInfo label="Trade Value" value={fmtCompactUsd(item.tradeUsd)} />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <TinyInfo label="Trend" value={String(item.trend || "neutral").toUpperCase()} />
-          <TinyInfo label="Sector" value={item.sector || "General"} />
           <TinyInfo label="Entry Type" value={item.entryType || "Watch"} />
+          <TinyInfo label="Alert Status" value={(item.alertStatus || "NO_TRIGGER").replaceAll("_", " ")} />
           <TinyInfo label="RR" value={fmtRR(item.rr)} />
         </div>
 
@@ -465,62 +557,85 @@ function ExecutionPlan({ item }) {
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
             <CardContent className="space-y-4 p-5">
-              <InfoBlock title="Action Now" value={item.action} />
-              <InfoBlock title="What it means" value={item.why} />
-              <InfoBlock title="What to do next" value={item.nextStep} />
-              <InfoBlock title="Do not do" value={item.doNot} />
-              <InfoBlock title="Cancel plan if" value={item.cancelIf} />
+              <InfoBlock title="Can buy now?" value={canBuyNow} />
+              <InfoBlock title="Action now" value={item.actionNow || item.action || action} />
+              <InfoBlock title="What to do next" value={item.nextAction || item.whatToDo || item.nextStep || "Wait for clean confirmation."} />
+              <InfoBlock title="Do not do" value={item.doNotDo || item.doNot || "Do not chase spike."} />
+              <InfoBlock title="Cancel plan if" value={item.cancelPlanIf || item.cancelIf || "Cancel if support/invalidation fails."} />
             </CardContent>
           </Card>
 
           <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
             <CardContent className="space-y-4 p-5">
-              <InfoBlock title="Why this is cheap" value={item.whyCheap || "N/A"} />
-              <InfoBlock title="Tradability" value={item.exchangeText || "Unknown"} />
-              <InfoBlock title="Confidence" value={item.confidence || "N/A"} />
+              <InfoBlock title="Tradability" value={`${item.tradabilityTier || "?"} · ${item.tradabilityLabel || item.exchangeText || "Unknown"}`} />
+              <InfoBlock title="Price zone" value={item.priceZone || "UNKNOWN"} />
+              <InfoBlock title="Confidence" value={`${fmtScore100(confidence100)} · ${item.confidence || "N/A"}`} />
               <InfoBlock title="Trap reason" value={item.trapReason || "No major trap flagged"} />
             </CardContent>
           </Card>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-        {safeArray(item.history).length > 0 && (
-          <Card className="rounded-3xl border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="text-lg text-slate-100">Micro Structure Snapshot</CardTitle>
-              <CardDescription className="text-slate-400">Recent score history from the current engine.</CardDescription>
-            </CardHeader>
-            <CardContent className="h-56 p-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={item.history}>
-                  <defs>
-                    <linearGradient id={`hist-${item.token}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#34d399" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#34d399" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="d" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#020617",
-                      border: "1px solid #334155",
-                      borderRadius: "16px",
-                      color: "#e2e8f0",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#34d399"
-                    fill={`url(#hist-${item.token})`}
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
+function MarketModePanel({ mode, alerts }) {
+  const current = mode || {};
+  const m = current.marketMode || "WAITING";
+  const tone = m === "AGGRESSIVE" ? "emerald" : m === "SELECTIVE" ? "cyan" : m === "DEFENSIVE" ? "rose" : "amber";
+  const toneClass = tone === "emerald"
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+    : tone === "cyan"
+    ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+    : tone === "rose"
+    ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+    : "border-amber-500/30 bg-amber-500/10 text-amber-300";
+
+  return (
+    <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-3 text-4xl text-slate-50">
+              <Target className="h-6 w-6 text-emerald-300" />
+              Market Decision Panel
+            </CardTitle>
+            <CardDescription className="mt-2 text-xl text-slate-400">
+              {current.headline || "Waiting for clean execution confirmation."}
+            </CardDescription>
+          </div>
+          <Badge className={cn("rounded-full border px-5 py-3 text-base", toneClass)}>
+            {m} MODE
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+          <div className="text-sm uppercase tracking-wide text-slate-400">Best Action Now</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-50">
+            {current.bestAction || "Set alerts, wait for retest, and avoid forced entries."}
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <MiniPlan label="Execution Ready" value={String(current.executionReadyCount ?? 0)} />
+            <MiniPlan label="Wait / Retest" value={String(current.waitRetestCount ?? 0)} />
+            <MiniPlan label="Avoid / Caution" value={String(current.avoidCount ?? current.cautionCount ?? 0)} />
+          </div>
+        </div>
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-5">
+          <div className="text-sm uppercase tracking-wide text-slate-400">Live Execution Alerts</div>
+          <div className="mt-3 space-y-2">
+            {safeArray(alerts).length === 0 ? (
+              <div className="text-slate-400">No trigger fired yet. Dashboard is monitoring zones.</div>
+            ) : (
+              safeArray(alerts).slice(0, 5).map((a, idx) => (
+                <div key={`${a.token || idx}-${idx}`} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="font-semibold text-slate-100">{a.token} · {a.finalAction || a.alertStatus}</div>
+                  <div className="text-sm text-slate-400">{a.alertMessage || a.suggestedSize}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -825,6 +940,8 @@ export default function App() {
   const scoreTrend = safeArray(dashboard.performance?.scoreTrend);
   const actionMix = safeArray(dashboard.performance?.actionMix);
   const proof = safeArray(dashboard.performance?.proof);
+  const marketMode = dashboard.marketMode || {};
+  const executionAlerts = safeArray(dashboard.executionAlerts);
 
   useEffect(() => {
     const firstCandidate =
@@ -996,6 +1113,8 @@ export default function App() {
               </CardContent>
             </Card>
 
+            <MarketModePanel mode={marketMode} alerts={executionAlerts} />
+
             <div className="grid gap-6 xl:grid-cols-3">
               <Card className="rounded-3xl border-slate-800 bg-slate-950/70 shadow-2xl xl:col-span-2">
                 <CardHeader>
@@ -1009,7 +1128,7 @@ export default function App() {
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2">
                   {executionReady.length === 0 ? (
-                    <div className="text-slate-400">No execution-ready setup right now.</div>
+                    <div className="text-slate-400">No confirmed buy setup right now. Waiting mode is active.</div>
                   ) : (
                     executionReady.map((item) => (
                       <TokenCard
@@ -1035,7 +1154,7 @@ export default function App() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {topSniperPicks.length === 0 ? (
-                    <div className="text-slate-400">No sniper picks right now.</div>
+                    <div className="text-slate-400">No sniper pick fired yet. Wait for retest/support alert.</div>
                   ) : (
                     topSniperPicks.map((item, index) => (
                       <div
