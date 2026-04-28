@@ -320,6 +320,417 @@ def calc_opportunity_rank(item: Dict[str, Any]) -> float:
     return round((opp * 0.55) + (score * 0.25) + (impact * 0.20), 4)
 
 
+
+# ============================================================
+# SNITCH v11 Decision Engine
+# Purpose:
+# - Convert raw score into trader-friendly 0-100 scores.
+# - Separate opportunity from execution.
+# - Prevent "empty dashboard = failure" by adding market mode.
+# - Give simple action guidance: BUY SMALL / WAIT / WATCH / AVOID.
+# ============================================================
+
+def clamp(v: Any, low: float = 0.0, high: float = 100.0) -> float:
+    return max(low, min(high, safe_float(v, 0.0)))
+
+
+def score_to_100(raw: Any, raw_max: float = 10.0) -> float:
+    val = safe_float(raw, 0.0)
+    if raw_max <= 0:
+        return 0.0
+    return round(clamp((val / raw_max) * 100.0), 1)
+
+
+def confidence_label_from_score(score: Any) -> str:
+    s = safe_float(score)
+    if s >= 78:
+        return "High"
+    if s >= 62:
+        return "Medium"
+    if s >= 48:
+        return "Low-Medium"
+    return "Low"
+
+
+def get_buy_zone_bounds(item: Dict[str, Any]) -> Tuple[float, float]:
+    zone = item.get("buyZone") or item.get("buy_zone") or []
+    if isinstance(zone, (list, tuple)) and len(zone) >= 2:
+        return safe_float(zone[0]), safe_float(zone[1])
+    return safe_float(item.get("buyZoneLow") or item.get("buy_zone_low")), safe_float(
+        item.get("buyZoneHigh") or item.get("buy_zone_high")
+    )
+
+
+def classify_tradability_v11(item: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    A = cleaner venue/liquidity condition.
+    B = tradable, but still needs venue verification.
+    C = speculative / size carefully.
+    D = avoid due weak liquidity or unknown tradability.
+    """
+    exchange_text = str(item.get("exchangeText") or item.get("exchange") or "").lower()
+    is_major = bool(item.get("isMajor"))
+    trade_usd = safe_float(item.get("tradeUsd") or item.get("volume24h"))
+    market_cap = safe_float(item.get("marketCap"))
+    volume = safe_float(item.get("volume24h") or item.get("tradeUsd"))
+
+    major_venue = (
+        "binance" in exchange_text
+        or "major venue" in exchange_text
+        or ("verified" in exchange_text and "not verified" not in exchange_text)
+    )
+
+    if is_major or major_venue:
+        return {"tier": "A", "label": "Major venue / cleaner execution", "scoreBoost": 14.0}
+
+    if market_cap >= 15_000_000 and volume >= 5_000_000 and trade_usd >= 5_000_000:
+        return {"tier": "B", "label": "Liquid watchlist / verify venue", "scoreBoost": 5.0}
+
+    if market_cap >= 2_000_000 and volume >= 1_000_000:
+        return {"tier": "C", "label": "Speculative / size carefully", "scoreBoost": -9.0}
+
+    return {"tier": "D", "label": "Avoid / weak tradability", "scoreBoost": -28.0}
+
+
+def detect_alert_status_v11(item: Dict[str, Any]) -> Dict[str, str]:
+    price = safe_float(item.get("currentPrice") or item.get("price"))
+    buy_low, buy_high = get_buy_zone_bounds(item)
+    breakout = safe_float(item.get("breakoutTrigger"))
+    invalidation = safe_float(item.get("invalidation"))
+    tp1 = safe_float(item.get("tp1"))
+
+    if price <= 0:
+        return {
+            "alertStatus": "NO_PRICE",
+            "priceZone": "UNKNOWN",
+            "alertMessage": "No live price available.",
+        }
+
+    if invalidation > 0 and price < invalidation:
+        return {
+            "alertStatus": "SUPPORT_LOST",
+            "priceZone": "BELOW_INVALIDATION",
+            "alertMessage": "Setup failed. Avoid new entry.",
+        }
+
+    if tp1 > 0 and price >= tp1 * 0.985:
+        return {
+            "alertStatus": "TAKE_PROFIT_WATCH",
+            "priceZone": "NEAR_TP1",
+            "alertMessage": "Price is near target. Do not chase.",
+        }
+
+    if breakout > 0 and price > breakout:
+        return {
+            "alertStatus": "BREAKOUT_CONFIRMED",
+            "priceZone": "ABOVE_BREAKOUT",
+            "alertMessage": "Breakout detected. Wait for clean retest before entry.",
+        }
+
+    if breakout > 0 and price >= breakout * 0.985:
+        return {
+            "alertStatus": "BREAKOUT_WATCH",
+            "priceZone": "NEAR_BREAKOUT",
+            "alertMessage": "Near breakout trigger. Prepare alert, do not chase.",
+        }
+
+    if buy_low > 0 and buy_high > 0 and buy_low <= price <= buy_high * 1.012:
+        return {
+            "alertStatus": "NEAR_SUPPORT",
+            "priceZone": "BUY_ZONE",
+            "alertMessage": "Near buy zone. Wait for bounce confirmation.",
+        }
+
+    return {
+        "alertStatus": "NO_TRIGGER",
+        "priceZone": "MID_RANGE",
+        "alertMessage": "No execution trigger yet. Monitor only.",
+    }
+
+
+def build_decision_engine_v11(item: Dict[str, Any]) -> Dict[str, Any]:
+    base100 = score_to_100(item.get("score"))
+    impact = safe_float(item.get("impactPct"))
+    rr = safe_float(item.get("rr"))
+    trade_usd = safe_float(item.get("tradeUsd") or item.get("volume24h"))
+    volume = safe_float(item.get("volume24h") or item.get("tradeUsd"))
+    fdv = safe_float(item.get("fdv"))
+    direction = str(item.get("direction", ""))
+    original_action = str(item.get("actionShort") or "")
+
+    tradability = classify_tradability_v11(item)
+    alert = detect_alert_status_v11(item)
+
+    # Opportunity = is it worth tracking?
+    opportunity = base100 * 0.55
+
+    if impact >= 4:
+        opportunity += 12
+    elif impact >= 2:
+        opportunity += 8
+    elif impact >= 1:
+        opportunity += 4
+
+    if volume >= 100_000_000:
+        opportunity += 14
+    elif volume >= 30_000_000:
+        opportunity += 10
+    elif volume >= 10_000_000:
+        opportunity += 7
+    elif volume >= 3_000_000:
+        opportunity += 4
+    else:
+        opportunity -= 5
+
+    if 0 < fdv <= 25_000_000:
+        opportunity += 9
+    elif 0 < fdv <= 100_000_000:
+        opportunity += 6
+    elif fdv >= 1_000_000_000:
+        opportunity -= 4
+
+    if bool(item.get("isMajor")):
+        opportunity += 5
+
+    opportunity = clamp(opportunity)
+
+    # Execution = is it actionable now?
+    execution = base100 * 0.42
+
+    if alert["alertStatus"] == "NEAR_SUPPORT":
+        execution += 24
+    elif alert["alertStatus"] == "BREAKOUT_CONFIRMED":
+        execution += 16
+    elif alert["alertStatus"] == "BREAKOUT_WATCH":
+        execution += 10
+    elif alert["alertStatus"] == "SUPPORT_LOST":
+        execution -= 38
+    elif alert["alertStatus"] == "TAKE_PROFIT_WATCH":
+        execution -= 20
+
+    if rr >= 2.0:
+        execution += 18
+    elif rr >= 1.6:
+        execution += 11
+    elif rr >= 1.3:
+        execution += 5
+    elif rr > 0:
+        execution -= 10
+
+    execution += safe_float(tradability["scoreBoost"])
+    execution = clamp(execution)
+
+    # Risk: higher number = more risk.
+    risk_score = 45.0
+
+    if tradability["tier"] == "A":
+        risk_score -= 12
+    elif tradability["tier"] == "B":
+        risk_score += 4
+    elif tradability["tier"] == "C":
+        risk_score += 18
+    elif tradability["tier"] == "D":
+        risk_score += 36
+
+    if rr > 0 and rr < 1.3:
+        risk_score += 12
+
+    if alert["alertStatus"] in {"SUPPORT_LOST", "TAKE_PROFIT_WATCH"}:
+        risk_score += 20
+
+    if "Sell" in direction or "REDUCE" in original_action.upper():
+        risk_score += 18
+
+    risk_score = clamp(risk_score)
+
+    final_confidence = clamp((opportunity * 0.46) + (execution * 0.44) - (risk_score * 0.22) + 18)
+
+    if "Sell" in direction or "REDUCE" in original_action.upper():
+        can_buy_now = "NO"
+        final_action = "REDUCE / AVOID"
+        suggested_size = "0%"
+    elif alert["alertStatus"] == "SUPPORT_LOST" or tradability["tier"] == "D":
+        can_buy_now = "NO"
+        final_action = "AVOID"
+        suggested_size = "0%"
+    elif execution >= 76 and final_confidence >= 70 and risk_score <= 55 and rr >= 1.6:
+        can_buy_now = "SMALL YES"
+        final_action = "BUY SMALL"
+        suggested_size = "1% - 2% capital max"
+    elif alert["alertStatus"] == "NEAR_SUPPORT" and final_confidence >= 52:
+        can_buy_now = "WAIT"
+        final_action = "WAIT BOUNCE"
+        suggested_size = "0.5% - 1% only after bounce"
+    elif alert["alertStatus"] in {"BREAKOUT_CONFIRMED", "BREAKOUT_WATCH"}:
+        can_buy_now = "WAIT"
+        final_action = "WAIT RETEST"
+        suggested_size = "0.5% - 1% only after retest"
+    elif bool(item.get("isMajor")) and opportunity >= 48:
+        can_buy_now = "NO"
+        final_action = "WATCH SUPPORT"
+        suggested_size = "No entry yet"
+    elif opportunity >= 50 and tradability["tier"] in {"B", "C"}:
+        can_buy_now = "NO"
+        final_action = "SPECULATIVE WATCH"
+        suggested_size = "0.25% - 0.5% max after confirmation"
+    else:
+        can_buy_now = "NO"
+        final_action = "IGNORE FOR NOW"
+        suggested_size = "0%"
+
+    if final_action in {"WAIT BOUNCE", "WAIT RETEST", "SPECULATIVE WATCH"}:
+        action_now = "Set Alert / Monitor Zone"
+    elif final_action == "BUY SMALL":
+        action_now = "Buy Small Only"
+    elif final_action in {"AVOID", "REDUCE / AVOID"}:
+        action_now = "Avoid / Reduce Risk"
+    else:
+        action_now = "Watch Only"
+
+    return {
+        "opportunityScore100": round(opportunity, 1),
+        "executionScore100": round(execution, 1),
+        "riskScore100": round(risk_score, 1),
+        "finalConfidence": round(final_confidence, 1),
+        "confidence": confidence_label_from_score(final_confidence),
+        "tradabilityTier": tradability["tier"],
+        "tradabilityLabel": tradability["label"],
+        "alertStatus": alert["alertStatus"],
+        "priceZone": alert["priceZone"],
+        "alertMessage": alert["alertMessage"],
+        "canBuyNow": can_buy_now,
+        "finalAction": final_action,
+        "suggestedSize": suggested_size,
+        "actionNow": action_now,
+        "originalActionShort": original_action,
+    }
+
+
+def apply_decision_label_v11(item: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Keep old dashboard compatibility but upgrade the visible action label.
+    """
+    decision = build_decision_engine_v11(item)
+    item.update(decision)
+
+    # The UI already reads actionShort, so upgrade it without changing the UI.
+    if item.get("finalAction") and item["finalAction"] != "IGNORE FOR NOW":
+        item["actionShort"] = item["finalAction"]
+
+    # Make card copy more decisive and less "loser/empty".
+    final_action = item.get("finalAction")
+    if final_action == "WAIT BOUNCE":
+        item["nextAction"] = "Wait for bounce confirmation near buy zone."
+        item["whatToDo"] = item["nextAction"]
+        item["doNotDo"] = "Do not buy before bounce confirmation."
+    elif final_action == "WAIT RETEST":
+        item["nextAction"] = "Wait for breakout retest before entry."
+        item["whatToDo"] = item["nextAction"]
+        item["doNotDo"] = "Do not chase the breakout candle."
+    elif final_action == "SPECULATIVE WATCH":
+        item["nextAction"] = "Watch only. Size very small if confirmation appears."
+        item["whatToDo"] = item["nextAction"]
+        item["doNotDo"] = "Do not size too big on speculative token."
+    elif final_action == "BUY SMALL":
+        item["nextAction"] = "Buy small only, with invalidation respected."
+        item["whatToDo"] = item["nextAction"]
+        item["doNotDo"] = "Do not all-in. Do not average down blindly."
+    elif final_action in {"AVOID", "REDUCE / AVOID"}:
+        item["nextAction"] = "Avoid new entry or reduce existing risk."
+        item["whatToDo"] = item["nextAction"]
+        item["doNotDo"] = "Do not open fresh exposure."
+
+    return item
+
+
+def build_market_mode_v11(
+    focus: List[Dict[str, Any]],
+    emerging: List[Dict[str, Any]],
+    caution: List[Dict[str, Any]],
+    major_monitor: List[Dict[str, Any]],
+    reject_reasons: Dict[str, int],
+) -> Dict[str, Any]:
+    all_active = focus + emerging + major_monitor
+    execution_ready = [x for x in all_active if x.get("finalAction") == "BUY SMALL"]
+    waiting = [x for x in all_active if x.get("finalAction") in {"WAIT BOUNCE", "WAIT RETEST", "WATCH SUPPORT"}]
+    speculative = [x for x in all_active if x.get("finalAction") == "SPECULATIVE WATCH"]
+    weak_momentum = safe_int(reject_reasons.get("weak_momentum") or reject_reasons.get("WEAK MOMENTUM"))
+
+    if len(execution_ready) >= 3:
+        mode = "AGGRESSIVE"
+        headline = "Clean execution opportunities are available."
+        best_action = "Focus only on confirmed setups with valid invalidation."
+    elif len(execution_ready) >= 1:
+        mode = "SELECTIVE"
+        headline = "A few execution setups are available."
+        best_action = "Use small size only and respect invalidation."
+    elif len(waiting) >= 3 or len(focus) >= 3:
+        mode = "WAITING"
+        headline = "Opportunities are forming, but confirmation is still needed."
+        best_action = "Set alerts near support, breakout, and retest zones."
+    else:
+        mode = "DEFENSIVE"
+        headline = "No clean buy setup right now."
+        best_action = "Do not force trade. Preserve capital and wait for triggers."
+
+    return {
+        "mode": mode,
+        "headline": headline,
+        "bestAction": best_action,
+        "executionReadyCount": len(execution_ready),
+        "waitingCount": len(waiting),
+        "speculativeCount": len(speculative),
+        "cautionCount": len(caution),
+        "weakMomentumRejects": weak_momentum,
+    }
+
+
+def build_execution_alerts_v11(items: List[Dict[str, Any]], limit: int = 10) -> List[Dict[str, Any]]:
+    priority = {
+        "NEAR_SUPPORT": 5,
+        "BREAKOUT_CONFIRMED": 4,
+        "BREAKOUT_WATCH": 3,
+        "TAKE_PROFIT_WATCH": 2,
+        "SUPPORT_LOST": 1,
+    }
+
+    active = [
+        x for x in items
+        if x.get("alertStatus") in priority
+    ]
+
+    active = sorted(
+        active,
+        key=lambda x: (
+            priority.get(str(x.get("alertStatus")), 0),
+            safe_float(x.get("finalConfidence")),
+            safe_float(x.get("executionScore100")),
+        ),
+        reverse=True,
+    )
+
+    out = []
+    for x in active[:limit]:
+        buy_low, buy_high = get_buy_zone_bounds(x)
+        out.append(
+            {
+                "token": x.get("token"),
+                "pair": x.get("pair"),
+                "alertStatus": x.get("alertStatus"),
+                "action": x.get("finalAction"),
+                "canBuyNow": x.get("canBuyNow"),
+                "confidence": x.get("finalConfidence"),
+                "message": x.get("alertMessage"),
+                "buyZone": [buy_low, buy_high] if buy_low and buy_high else [],
+                "breakoutTrigger": x.get("breakoutTrigger"),
+                "invalidation": x.get("invalidation"),
+                "suggestedSize": x.get("suggestedSize"),
+            }
+        )
+
+    return out
+
+
 def build_potential_token(item: Dict[str, Any]) -> Dict[str, Any]:
     price = safe_float(item.get("currentPrice"))
     buy_zone = item.get("buyZone", [])
@@ -524,6 +935,7 @@ def main() -> None:
         item["executionRank"] = calc_execution_rank(item)
         item["sniperRank"] = calc_sniper_rank(item)
         item["opportunityRank"] = calc_opportunity_rank(item)
+        item = apply_decision_label_v11(item)
 
         weak_reason = weak_momentum_reason(item, rules)
         if weak_reason:
@@ -538,17 +950,17 @@ def main() -> None:
             for x in candidates
             if not x["isMajor"]
             and x["direction"] == "Buy Pressure"
-            and x.get("focusBucket") == "focus"
             and x.get("structureValid", False)
-            and safe_float(x.get("rr")) >= 1.18
+            and x.get("finalAction") in {"BUY SMALL", "WAIT BOUNCE", "WAIT RETEST", "SPECULATIVE WATCH"}
+            and safe_float(x.get("finalConfidence")) >= safe_float(rules.get("min_v11_focus_confidence", 50))
         ],
         key=lambda x: (
-            bool(x.get("executionReady")),
-            x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT", "WAIT FOR CONFIRMATION"},
-            safe_float(x.get("executionRank")),
-            safe_float(x.get("rr")),
-            safe_float(x.get("score")),
-            safe_float(x.get("impactPct")),
+            x.get("finalAction") == "BUY SMALL",
+            x.get("finalAction") == "WAIT BOUNCE",
+            x.get("finalAction") == "WAIT RETEST",
+            safe_float(x.get("finalConfidence")),
+            safe_float(x.get("executionScore100")),
+            safe_float(x.get("opportunityScore100")),
             safe_float(x.get("tradeUsd")),
         ),
         reverse=True,
@@ -558,18 +970,14 @@ def main() -> None:
         [
             x
             for x in focus
-            if (
-                bool(x.get("executionReady"))
-                or x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT"}
-            )
-            and safe_float(x.get("rr")) >= 1.22
+            if x.get("finalAction") == "BUY SMALL"
+            and safe_float(x.get("rr")) >= safe_float(rules.get("min_v11_execution_rr", 1.6))
         ],
         key=lambda x: (
-            x.get("actionShort") == "BUY NOW",
-            x.get("actionShort") == "BUY ON RETEST",
+            safe_float(x.get("finalConfidence")),
+            safe_float(x.get("executionScore100")),
             safe_float(x.get("rr")),
-            safe_float(x.get("executionRank")),
-            safe_float(x.get("score")),
+            safe_float(x.get("tradeUsd")),
         ),
         reverse=True,
     )[: int(rules.get("target_execution_ready_count", 4))]
@@ -581,15 +989,14 @@ def main() -> None:
             if not x["isMajor"]
             and x["direction"] == "Buy Pressure"
             and x not in focus
-            and x.get("focusBucket") == "emerging"
             and x.get("structureValid", False)
-            and safe_float(x.get("score")) >= safe_float(rules.get("min_emerging_score", 5.2))
+            and x.get("finalAction") in {"WAIT BOUNCE", "WAIT RETEST", "WATCH SUPPORT", "SPECULATIVE WATCH"}
+            and safe_float(x.get("opportunityScore100")) >= safe_float(rules.get("min_v11_emerging_opportunity", 45))
         ],
         key=lambda x: (
-            safe_float(x.get("sniperRank")),
-            safe_float(x.get("opportunityRank")),
-            safe_float(x.get("score")),
-            safe_float(x.get("impactPct")),
+            safe_float(x.get("opportunityScore100")),
+            safe_float(x.get("finalConfidence")),
+            safe_float(x.get("executionScore100")),
             safe_float(x.get("tradeUsd")),
         ),
         reverse=True,
@@ -618,10 +1025,9 @@ def main() -> None:
     major_monitor = sorted(
         [x for x in candidates if x["isMajor"] and x.get("structureValid", False)],
         key=lambda x: (
-            x.get("actionShort") in {"MAJOR BUY ZONE", "MAJOR BREAKOUT"},
-            safe_float(x.get("executionRank")),
-            safe_float(x.get("score")),
-            safe_float(x.get("impactPct")),
+            x.get("finalAction") in {"BUY SMALL", "WAIT BOUNCE", "WAIT RETEST", "WATCH SUPPORT"},
+            safe_float(x.get("opportunityScore100")),
+            safe_float(x.get("finalConfidence")),
             safe_float(x.get("tradeUsd")),
         ),
         reverse=True,
@@ -634,18 +1040,17 @@ def main() -> None:
             if not x["isMajor"]
             and x["direction"] == "Buy Pressure"
             and x.get("structureValid", False)
-            and x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT", "WAIT FOR CONFIRMATION"}
-            and safe_float(x.get("score")) >= 6.2
-            and safe_float(x.get("impactPct")) >= 0.9
-            and safe_float(x.get("rr")) >= 1.22
+            and x.get("finalAction") in {"BUY SMALL", "WAIT BOUNCE", "WAIT RETEST", "SPECULATIVE WATCH"}
+            and safe_float(x.get("finalConfidence")) >= safe_float(rules.get("min_v11_sniper_confidence", 50))
             and safe_float(x.get("marketCap")) <= safe_float(rules.get("max_sniper_market_cap_usd", 250_000_000))
             and safe_float(x.get("fdv")) <= safe_float(rules.get("max_sniper_fdv_usd", 260_000_000))
         ],
         key=lambda x: (
-            safe_float(x.get("sniperRank")),
-            x.get("actionShort") in {"BUY NOW", "BUY ON RETEST", "WAIT BREAKOUT"},
-            safe_float(x.get("rr")),
-            safe_float(x.get("impactPct")),
+            x.get("finalAction") == "BUY SMALL",
+            safe_float(x.get("finalConfidence")),
+            safe_float(x.get("opportunityScore100")),
+            safe_float(x.get("executionScore100")),
+            safe_float(x.get("tradeUsd")),
         ),
         reverse=True,
     )[: int(rules.get("target_sniper_count", 5))]
@@ -692,19 +1097,31 @@ def main() -> None:
     )
     recent_signals = build_recent(recent_items, int(rules.get("target_recent_count", 12)))
 
-    data_source_note = "CoinGecko + execution engine + manual presale/watchlist"
+    active_for_alerts = focus + emerging + caution + major_monitor + sniper_source
+    market_mode = build_market_mode_v11(focus, emerging, caution, major_monitor, reject_reasons)
+    execution_alerts = build_execution_alerts_v11(active_for_alerts, int(rules.get("target_execution_alert_count", 10)))
+
+    confidence_source = focus + emerging + major_monitor
+    if confidence_source:
+        avg_confidence = round(
+            sum(safe_float(x.get("finalConfidence")) for x in confidence_source) / len(confidence_source)
+        )
+    else:
+        avg_confidence = 0
+
+    data_source_note = "CoinGecko + execution engine v11 + manual presale/watchlist"
     if not binance_error:
-        data_source_note = "CoinGecko + Binance SNR + execution engine + manual presale/watchlist"
+        data_source_note = "CoinGecko + Binance SNR + execution engine v11 + manual presale/watchlist"
     else:
         data_source_note = (
-            "CoinGecko + fallback SNR + execution engine + manual presale/watchlist "
+            "CoinGecko + fallback SNR + execution engine v11 + manual presale/watchlist "
             f"| Binance unavailable: {binance_error}"
         )
 
     payload = {
         "meta": {
             "product": "SNITCH Alert Dashboard",
-            "mode": "Execution Monitor",
+            "mode": "Execution Monitor v11",
             "marketBias": "Neutral",
             "asOf": now_utc_text(),
             "dataSource": data_source_note,
@@ -714,7 +1131,7 @@ def main() -> None:
             "tradeFocus": len(focus),
             "emerging": len(emerging),
             "caution": len(caution),
-            "avgConfidence": 78 if execution_ready else 73,
+            "avgConfidence": avg_confidence,
             "winRate30d": 58,
         },
         "marketFunnel": {
@@ -724,6 +1141,8 @@ def main() -> None:
             "displayed": qualified,
             "rejectReasons": reject_reasons,
         },
+        "marketMode": market_mode,
+        "executionAlerts": execution_alerts,
         "tradeFocusNow": focus,
         "executionReady": execution_ready,
         "majorMonitor": major_monitor,
@@ -739,7 +1158,7 @@ def main() -> None:
             "proof": [
                 {"metric": "Qualified Signals", "value": str(qualified)},
                 {"metric": "Execution Ready", "value": str(len(execution_ready))},
-                {"metric": "Avg Confidence", "value": f"{78 if execution_ready else 73}/100"},
+                {"metric": "Avg Confidence", "value": f"{avg_confidence}/100"},
                 {"metric": "Risk-Off Alerts", "value": str(len(caution))},
             ],
         },
